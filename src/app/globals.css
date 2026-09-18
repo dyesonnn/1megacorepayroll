@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f8fafc;
+  --foreground: #0f172a;
 }
 
 @theme inline {
@@ -12,15 +12,89 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Table styles */
+table {
+  border-collapse: collapse;
+}
+
+/* Focus styles */
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+}
+
+/* Print styles for payslips */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: white;
+  }
+
+  .print-payslip {
+    border: 1px solid #000;
+    padding: 20px;
+  }
+
+  /* Payslip page: print only the sheet, full width, black on white */
+  body:has(#print-area) {
+    background: white;
+  }
+
+  body:has(#print-area) > div {
+    padding: 0 !important;
+    margin: 0 !important;
+    background: white !important;
+    min-height: auto !important;
+  }
+
+  body:has(#print-area) #print-area {
+    position: absolute;
+    inset: 0;
+  }
+
+  #print-area .payslip-sheet {
+    width: 100% !important;
+    max-width: none !important;
+    border: 1px solid #000;
+    border-radius: 0;
+  }
+
+  /* Reset zoom transform when printing */
+  #print-area > div {
+    transform: none !important;
+  }
 }

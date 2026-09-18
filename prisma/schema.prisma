@@ -1,0 +1,252 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Users & Auth ─────────────────────────────────────
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  password      String
+  role          String    @default("EMPLOYEE") // ADMIN, HR, EMPLOYEE
+  employeeId    String?   @unique
+  employee      Employee? @relation(fields: [employeeId], references: [id])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("users")
+}
+
+// ─── Employees ────────────────────────────────────────
+
+model Department {
+  id          String     @id @default(uuid())
+  name        String     @unique
+  description String?
+  employees   Employee[]
+  createdAt   DateTime   @default(now())
+
+  @@map("departments")
+}
+
+model ProjectSite {
+  id          String     @id @default(uuid())
+  name        String
+  location    String
+  description String?
+  isActive    Boolean    @default(true)
+  employees   Employee[]
+  attendances Attendance[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@map("project_sites")
+}
+
+model Employee {
+  id                String           @id @default(uuid())
+  employeeNumber    String           @unique
+  firstName         String
+  middleName        String?
+  lastName          String
+  suffix            String?
+  birthDate         DateTime?
+  gender            String?
+  civilStatus       String?
+  address           String?
+  phone             String?
+  email             String?
+  photo             String?
+
+  // Employment
+  position          String
+  departmentId      String
+  department        Department       @relation(fields: [departmentId], references: [id])
+  projectSiteId     String?
+  projectSite       ProjectSite?     @relation(fields: [projectSiteId], references: [id])
+  hireDate          DateTime
+  employmentStatus  String           @default("ACTIVE") // ACTIVE, INACTIVE, ON_LEAVE, TERMINATED, ARCHIVED
+  dailyRate         Float
+  monthlyRate       Float
+
+  // Government IDs
+  sssNumber         String?
+  philhealthNumber  String?
+  pagibigNumber     String?
+  tinNumber         String?
+
+  // Relations
+  user              User?
+  attendances       Attendance[]
+  payrollRecords    PayrollRecord[]
+  cashAdvances      CashAdvance[]
+  documents         EmployeeDocument[]
+  skills            EmployeeSkill[]
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@map("employees")
+}
+
+model EmployeeDocument {
+  id          String   @id @default(uuid())
+  employeeId  String
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  name        String
+  type        String
+  fileUrl     String
+  uploadedAt  DateTime @default(now())
+
+  @@map("employee_documents")
+}
+
+// ─── Holidays ────────────────────────────────────────
+
+model Holiday {
+  id        String   @id @default(uuid())
+  name      String
+  date      DateTime
+  // REGULAR: legal holiday (200% if worked, 100% if not)
+  // SPECIAL: special non-working holiday (130% if worked, no pay if not)
+  type      String   @default("REGULAR")
+  createdAt DateTime @default(now())
+
+  @@unique([date])
+  @@map("holidays")
+}
+
+// ─── Skills (for scheduling) ──────────────────────────
+
+model Skill {
+  id          String           @id @default(uuid())
+  name        String           @unique
+  description String?
+  employees   EmployeeSkill[]
+  createdAt   DateTime         @default(now())
+
+  @@map("skills")
+}
+
+model EmployeeSkill {
+  id          String   @id @default(uuid())
+  employeeId  String
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  skillId     String
+  skill       Skill    @relation(fields: [skillId], references: [id])
+  proficiency String?
+
+  @@unique([employeeId, skillId])
+  @@map("employee_skills")
+}
+
+// ─── Settings ─────────────────────────────────────────
+
+// Single-row key/value store for system-wide settings (id is always "default")
+model Settings {
+  id                        String @id @default("default")
+  cashAdvanceLimit          Float  @default(10000) // max outstanding PENDING cash advance per employee
+  cashAdvanceMaxNetFraction Float  @default(0.5)  // max fraction of net pay that cash advance deductions may consume
+
+  @@map("settings")
+}
+
+// ─── Attendance ───────────────────────────────────────
+
+model Attendance {
+  id                String       @id @default(uuid())
+  employeeId        String
+  employee          Employee     @relation(fields: [employeeId], references: [id])
+  projectSiteId     String?
+  projectSite       ProjectSite? @relation(fields: [projectSiteId], references: [id])
+  date              DateTime
+  timeIn            DateTime?
+  timeOut           DateTime?
+  hoursWorked       Float        @default(0)
+  overtimeHours     Float        @default(0)
+  lateMinutes       Float        @default(0)
+  undertimeMinutes  Float        @default(0)
+  status            String       @default("PRESENT") // PRESENT, ABSENT, LATE, UNDERTIME, HALF_DAY, REST_DAY, HOLIDAY
+  notes             String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  @@unique([employeeId, date])
+  @@map("attendances")
+}
+
+// ─── Payroll ──────────────────────────────────────────
+
+model PayrollPeriod {
+  id        String         @id @default(uuid())
+  name      String
+  startDate DateTime
+  endDate   DateTime
+  payDate   DateTime
+  status    String         @default("DRAFT") // DRAFT, PROCESSING, COMPLETED, PAID
+  includeOvertimePay Boolean @default(true) // whether OT pay is included in this period's computation
+  records   PayrollRecord[]
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@map("payroll_periods")
+}
+
+model PayrollRecord {
+  id                   String        @id @default(uuid())
+  payrollPeriodId      String
+  payrollPeriod        PayrollPeriod @relation(fields: [payrollPeriodId], references: [id])
+  employeeId           String
+  employee             Employee      @relation(fields: [employeeId], references: [id])
+
+  basicPay             Float         @default(0)
+  overtimePay          Float         @default(0)
+  holidayPay           Float         @default(0)
+  allowances           Float         @default(0)
+  bonuses              Float         @default(0)
+  doublePay            Float         @default(0)
+  grossPay             Float         @default(0)
+
+  sssDeduction         Float         @default(0)
+  philhealthDeduction  Float         @default(0)
+  pagibigDeduction     Float         @default(0)
+  withholdingTax       Float         @default(0)
+  otherDeductions      Float         @default(0)
+  totalDeductions      Float         @default(0)
+
+  netPay               Float         @default(0)
+
+  paid                 Boolean       @default(false)
+
+  daysWorked           Int           @default(0)
+  totalOvertimeHours   Float         @default(0)
+
+  cashAdvances         CashAdvance[]
+
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  @@unique([payrollPeriodId, employeeId])
+  @@map("payroll_records")
+}
+
+model CashAdvance {
+  id                   String        @id @default(uuid())
+  employeeId           String
+  employee             Employee      @relation(fields: [employeeId], references: [id])
+  amount               Float
+  advanceDate          DateTime
+  description          String?
+  status               String        @default("PENDING") // PENDING, DEDUCTED, CANCELLED
+  payrollRecordId      String?
+  payrollRecord        PayrollRecord? @relation(fields: [payrollRecordId], references: [id])
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  @@map("cash_advances")
+}
+
