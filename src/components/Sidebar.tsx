@@ -20,6 +20,7 @@ const menuItems = {
     { href: "/payroll/cash-advances/settings", label: "CA Settings", icon: "⚙️" },
     { href: "/reports", label: "Reports", icon: "📈" },
     { href: "/admin/users", label: "User Accounts", icon: "🔑" },
+    { href: "/change-password", label: "Change Password", icon: "🔒" },
   ],
   HR: [
     { href: "/dashboard", label: "Dashboard", icon: "📊" },
@@ -29,12 +30,13 @@ const menuItems = {
     { href: "/payroll", label: "Payroll", icon: "💰" },
     { href: "/payroll/cash-advances", label: "Cash Advances", icon: "💵" },
     { href: "/reports", label: "Reports", icon: "📈" },
+    { href: "/change-password", label: "Change Password", icon: "🔒" },
   ],
   EMPLOYEE: [
     { href: "/dashboard", label: "My Dashboard", icon: "📊" },
     { href: "/attendance", label: "My Attendance", icon: "📅" },
     { href: "/payroll", label: "My Payslips", icon: "💰" },
-
+    { href: "/change-password", label: "Change Password", icon: "🔒" },
   ],
 };
 

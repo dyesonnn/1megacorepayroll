@@ -27,6 +27,43 @@ export default function UserManagement({ users }: UserManagementProps) {
   const router = useRouter();
   const [loading, setLoading] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [resetUser, setResetUser] = useState<User | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+
+  const handleResetPassword = async () => {
+    if (!resetUser) return;
+    setMessage("");
+
+    if (newPassword.length < 8) {
+      setMessage("New password must be at least 8 characters");
+      return;
+    }
+
+    setLoading(resetUser.id);
+    try {
+      const res = await fetch("/api/auth/users/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: resetUser.id, newPassword }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setMessage(data.error || "Failed to reset password");
+        return;
+      }
+
+      setMessage(`Password reset for ${resetUser.email}`);
+      setResetUser(null);
+      setNewPassword("");
+      router.refresh();
+    } catch {
+      setMessage("Connection error");
+    } finally {
+      setLoading(null);
+    }
+  };
 
   const handleRoleChange = async (userId: string, newRole: string) => {
     setLoading(userId);
@@ -88,22 +125,70 @@ export default function UserManagement({ users }: UserManagementProps) {
                 </td>
                 <td className="px-4 py-3 text-slate-500 text-xs">{formatDate(user.createdAt)}</td>
                 <td className="px-4 py-3">
-                  <select
-                    value={user.role}
-                    onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                    disabled={loading === user.id}
-                    className="px-2 py-1 border border-slate-300 rounded text-xs bg-white disabled:opacity-50"
-                  >
-                    <option value="ADMIN">Admin</option>
-                    <option value="HR">HR Staff</option>
-                    <option value="EMPLOYEE">Employee</option>
-                  </select>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={user.role}
+                      onChange={(e) => handleRoleChange(user.id, e.target.value)}
+                      disabled={loading === user.id}
+                      className="px-2 py-1 border border-slate-300 rounded text-xs bg-white disabled:opacity-50"
+                    >
+                      <option value="ADMIN">Admin</option>
+                      <option value="HR">HR Staff</option>
+                      <option value="EMPLOYEE">Employee</option>
+                    </select>
+                    <button
+                      onClick={() => {
+                        setResetUser(user);
+                        setNewPassword("");
+                        setMessage("");
+                      }}
+                      disabled={loading === user.id}
+                      className="px-2 py-1 border border-slate-300 rounded text-xs bg-white hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      Reset PW
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {resetUser && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-sm shadow-xl">
+            <h2 className="text-lg font-bold text-slate-900 mb-1">Reset Password</h2>
+            <p className="text-sm text-slate-500 mb-4">
+              Set a new password for <span className="font-medium text-slate-700">{resetUser.email}</span>.
+              They stay logged in until their session expires.
+            </p>
+            <input
+              type="text"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="New password (min 8 characters)"
+              minLength={8}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-4"
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setResetUser(null)}
+                className="px-3 py-2 text-sm text-slate-600 hover:text-slate-900"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleResetPassword}
+                disabled={loading === resetUser.id || newPassword.length < 8}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+              >
+                {loading === resetUser.id ? "Saving..." : "Save Password"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
