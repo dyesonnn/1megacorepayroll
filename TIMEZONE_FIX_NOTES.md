@@ -40,6 +40,14 @@ client rendered that instant → 4:00 PM. Day/month query windows and the
   built with `manilaDateTime`; `startOfDay/endOfDay` via `utcDayStart` + 24h;
   the two `toTimeString()` round-trips are gone (stored `Date`s are passed
   straight into `calculateAttendance`); holiday writes use the day start.
+- Two pre-existing bugs found while testing the deployed app (they made a
+  correctly logged time-in/time-out show up as ABSENT with 0 hours):
+  - the `timein` branch updated an existing record without ever writing
+    `timeIn`, so a day that already had a record (e.g. from Quick Mark) kept
+    no time-in and the later time-out recomputed the status from a null
+    time-in. It now always persists `calc.timeIn`.
+  - `calculateAttendance` fell through to its initial `ABSENT` when only a
+    time-out existed; a time-out with no time-in is now `PRESENT`.
 - `api/holidays/route.ts`: duplicate check + create use `utcDayStart(date)`.
 - `api/payroll/route.ts`: `toLocalDateKey()` (server-local) replaced by `dayKey`;
   period window built from the stored day keys.
@@ -98,6 +106,19 @@ the volume.
     (unchanged OT rules).
   - Monthly sheet tooltips showed `Time In: 08:00` / `Time Out: 17:30`.
   - Test rows were deleted afterwards.
+- Re-ran the exact failed sequence: Quick Mark `ABSENT` → time-in `08:00` →
+  time-out `20:00` now stores `00:00Z`/`12:00Z`, gives `11h`, `+3h OT` and
+  `PRESENT` (before the two bug fixes it produced no time-in and `ABSENT 0h`),
+  and the attendance page renders `08:00 AM` / `08:00 PM`.
+  Test rows were deleted afterwards.
+
+## Legacy rows still show the old times
+
+Rows written before the fix (e.g. `Time In 04:00 PM` on the deployed app) keep
+showing the mis-stored instant until the data fix is run against the production
+volume — the code fix only affects new writes. Verified on the deployed app:
+a time-out entered as `08:00 PM` renders as `08:00 PM` (the old code would have
+shown `04:00 AM` the next day), so the deploy itself is correct.
 
 ## Still open (not part of the timezone fix)
 

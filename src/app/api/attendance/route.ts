@@ -65,6 +65,11 @@ function calculateAttendance(
   } else if (timeInDate) {
     // Only time-in, no time-out yet
     status = lateMinutes > 0 ? "LATE" : "PRESENT";
+  } else if (timeOutDate) {
+    // Time-out without a recorded time-in: they clearly worked, and there is
+    // no arrival time to judge lateness against. Without this the status fell
+    // through to the initial "ABSENT", so a logged time-out showed as absent.
+    status = "PRESENT";
   }
 
   return {
@@ -182,12 +187,17 @@ export async function POST(request: NextRequest) {
           where: { id: existing.id },
           data: {
             projectSiteId: projectSiteId || existing.projectSiteId,
+            // The entered time-in must always be persisted. A record can
+            // already exist for this day (e.g. created by Quick Mark), and
+            // without this the time-in was silently dropped — leaving the day
+            // with no time-in, 0 hours and a bogus ABSENT status.
+            timeIn: calc.timeIn ?? existing.timeIn,
             lateMinutes: calc.lateMinutes,
             hoursWorked: calc.hoursWorked,
             overtimeHours: calc.overtimeHours,
             undertimeMinutes: calc.undertimeMinutes,
             status: calc.status,
-            timeOut: calc.timeOut || existing.timeOut,
+            timeOut: calc.timeOut ?? existing.timeOut,
           },
         });
         return NextResponse.json(updated);
