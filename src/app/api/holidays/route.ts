@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { utcDayStart } from "@/lib/utils";
 
 export async function GET() {
   try {
@@ -32,10 +33,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Type must be REGULAR or SPECIAL" }, { status: 400 });
     }
 
+    // Holiday dates are stored as UTC midnight of the calendar day
+    const holidayDate = utcDayStart(date);
+
     // Check if holiday already exists on this date
     const existing = await prisma.holiday.findFirst({
       where: {
-        date: new Date(date),
+        date: holidayDate,
       },
     });
 
@@ -46,7 +50,7 @@ export async function POST(request: NextRequest) {
     const holiday = await prisma.holiday.create({
       data: {
         name,
-        date: new Date(date),
+        date: holidayDate,
         type,
       },
     });

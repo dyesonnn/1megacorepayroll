@@ -1,19 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { manilaDateTime, utcDayStart, dayKey } from "@/lib/utils";
 
-const SCHEDULED_START_HOUR = 8; // 8 AM
-const SCHEDULED_END_HOUR = 17; // 5 PM
+// Fixed Philippine-time schedule: 8 AM – 5 PM.
+const SCHEDULED_START = "08:00";
+const SCHEDULED_END = "17:00";
 const LUNCH_BREAK_HOURS = 1;
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
-function calculateAttendance(dateStr: string, timeIn?: string, timeOut?: string) {
-  const dateObj = new Date(dateStr);
+/**
+ * A submitted "HH:MM" wall-clock time (interpreted as Philippine time) or an
+ * already-stored instant, as a real Date.
+ */
+function toInstant(dateStr: string, time: string | Date): Date {
+  return time instanceof Date ? time : manilaDateTime(dateStr, time);
+}
 
-  const scheduledStart = new Date(dateObj);
-  scheduledStart.setHours(SCHEDULED_START_HOUR, 0, 0, 0);
-
-  const scheduledEnd = new Date(dateObj);
-  scheduledEnd.setHours(SCHEDULED_END_HOUR, 0, 0, 0);
+function calculateAttendance(
+  dateStr: string,
+  timeIn?: string | Date | null,
+  timeOut?: string | Date | null
+) {
+  const scheduledStart = manilaDateTime(dateStr, SCHEDULED_START);
+  const scheduledEnd = manilaDateTime(dateStr, SCHEDULED_END);
 
   let lateMinutes = 0;
   let hoursWorked = 0;
@@ -21,8 +31,8 @@ function calculateAttendance(dateStr: string, timeIn?: string, timeOut?: string)
   let undertimeMinutes = 0;
   let status = "ABSENT";
 
-  const timeInDate = timeIn ? new Date(`${dateStr}T${timeIn}`) : null;
-  const timeOutDate = timeOut ? new Date(`${dateStr}T${timeOut}`) : null;
+  const timeInDate = timeIn ? toInstant(dateStr, timeIn) : null;
+  const timeOutDate = timeOut ? toInstant(dateStr, timeOut) : null;
 
   if (timeInDate) {
     lateMinutes = timeInDate > scheduledStart
@@ -84,9 +94,10 @@ export async function POST(request: NextRequest) {
     // (e.g. PRESENT with a premium, instead of a separate HOLIDAY status).
     const validHolidayType = holidayType === "REGULAR" || holidayType === "SPECIAL" ? holidayType : null;
 
-    const dateObj = new Date(date);
-    const startOfDay = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
-    const endOfDay = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate() + 1);
+    // Date-only columns use UTC midnight of the calendar day so they are
+    // identical no matter which timezone the server runs in.
+    const startOfDay = utcDayStart(date);
+    const endOfDay = new Date(startOfDay.getTime() + ONE_DAY_MS);
 
     // Find existing attendance for this employee on this date
     const existing = await prisma.attendance.findFirst({
@@ -116,7 +127,7 @@ export async function POST(request: NextRequest) {
         });
       } else {
         await prisma.holiday.create({
-          data: { date: new Date(date), type: holidayKind, name },
+          data: { date: startOfDay, type: holidayKind, name },
         });
       }
     };
@@ -138,8 +149,8 @@ export async function POST(request: NextRequest) {
             status,
             projectSiteId: projectSiteId || existing.projectSiteId,
             // Preserve time records if they exist
-            timeIn: timeIn ? new Date(`${date}T${timeIn}`) : existing.timeIn,
-            timeOut: timeOut ? new Date(`${date}T${timeOut}`) : existing.timeOut,
+            timeIn: timeIn ? manilaDateTime(date, timeIn) : existing.timeIn,
+            timeOut: timeOut ? manilaDateTime(date, timeOut) : existing.timeOut,
           },
         });
         return NextResponse.json(updated);
@@ -151,8 +162,8 @@ export async function POST(request: NextRequest) {
           projectSiteId: projectSiteId || null,
           date: startOfDay,
           status,
-          timeIn: timeIn ? new Date(`${date}T${timeIn}`) : null,
-          timeOut: timeOut ? new Date(`${date}T${timeOut}`) : null,
+          timeIn: timeIn ? manilaDateTime(date, timeIn) : null,
+          timeOut: timeOut ? manilaDateTime(date, timeOut) : null,
         },
       });
       return NextResponse.json(attendance, { status: 201 });
@@ -164,7 +175,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Time-in is required" }, { status: 400 });
       }
 
-      const calc = calculateAttendance(date, timeIn, existing?.timeOut ? existing.timeOut.toTimeString().slice(0, 5) : undefined);
+      const calc = calculateAttendance(date, timeIn, existing?.timeOut);
 
       if (existing) {
         const updated = await prisma.attendance.update({
@@ -187,7 +198,7 @@ export async function POST(request: NextRequest) {
           employeeId,
           projectSiteId: projectSiteId || null,
           date: startOfDay,
-          timeIn: new Date(`${date}T${timeIn}`),
+          timeIn: toInstant(date, timeIn),
           lateMinutes: calc.lateMinutes,
           hoursWorked: calc.hoursWorked,
           overtimeHours: calc.overtimeHours,
@@ -208,12 +219,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "No time-in record found for this date. Please log time-in first." }, { status: 400 });
       }
 
-      const calc = calculateAttendance(date, existing.timeIn?.toTimeString().slice(0, 5), timeOut);
+      const calc = calculateAttendance(date, existing.timeIn, timeOut);
 
       const updated = await prisma.attendance.update({
         where: { id: existing.id },
         data: {
-          timeOut: new Date(`${date}T${timeOut}`),
+          timeOut: toInstant(date, timeOut),
           lateMinutes: calc.lateMinutes,
           hoursWorked: calc.hoursWorked,
           overtimeHours: calc.overtimeHours,
@@ -236,9 +247,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Attendance record not found" }, { status: 404 });
       }
 
-      const newDateObj = date !== undefined ? new Date(date) : current.date;
-      const newStartOfDay = new Date(newDateObj.getFullYear(), newDateObj.getMonth(), newDateObj.getDate());
-      const newEndOfDay = new Date(newDateObj.getFullYear(), newDateObj.getMonth(), newDateObj.getDate() + 1);
+      const newDay = date !== undefined ? String(date).slice(0, 10) : dayKey(current.date);
+      const newStartOfDay = utcDayStart(newDay);
+      const newEndOfDay = new Date(newStartOfDay.getTime() + ONE_DAY_MS);
 
       const updateData: Record<string, unknown> = {};
 
@@ -251,9 +262,9 @@ export async function POST(request: NextRequest) {
 
       if (employeeId !== undefined) updateData.employeeId = employeeId;
       if (projectSiteId !== undefined) updateData.projectSiteId = projectSiteId;
-      if (date !== undefined) updateData.date = new Date(date);
-      if (timeIn !== undefined) updateData.timeIn = timeIn ? new Date(timeIn) : null;
-      if (timeOut !== undefined) updateData.timeOut = timeOut ? new Date(timeOut) : null;
+      if (date !== undefined) updateData.date = newStartOfDay;
+      if (timeIn !== undefined) updateData.timeIn = timeIn ? toInstant(newDay, timeIn) : null;
+      if (timeOut !== undefined) updateData.timeOut = timeOut ? toInstant(newDay, timeOut) : null;
       if (lateMinutes !== undefined) updateData.lateMinutes = lateMinutes;
       if (hoursWorked !== undefined) updateData.hoursWorked = hoursWorked;
       if (overtimeHours !== undefined) updateData.overtimeHours = overtimeHours;

@@ -235,15 +235,29 @@ async function main() {
     data: { email: "employee@1megacore.com", password: hashedPassword, role: "EMPLOYEE", employeeId: employees[2].id },
   });
 
-  // Create sample attendance for current month
+  // Create sample attendance for current month.
+  // Same conventions as the app: date-only columns are UTC midnight of the
+  // calendar day, and times are real instants (Manila wall clock = UTC+8).
   const today = new Date();
-  const year = today.getFullYear();
-  const month = today.getMonth();
+  const [year, monthNum, dayOfMonth] = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  })
+    .format(today)
+    .split("-")
+    .map(Number);
+  const month = monthNum - 1;
+
+  const dayStart = (d: number) => new Date(Date.UTC(year, month, d));
+  const manilaInstant = (d: number, hour: number, minute: number) =>
+    new Date(Date.UTC(year, month, d, hour - 8, minute));
 
   for (const employee of employees) {
-    for (let day = 1; day <= Math.min(today.getDate(), 15); day++) {
-      const date = new Date(year, month, day);
-      const dayOfWeek = date.getDay();
+    for (let day = 1; day <= Math.min(dayOfMonth, 15); day++) {
+      const date = dayStart(day);
+      const dayOfWeek = date.getUTCDay();
       if (dayOfWeek === 0) continue; // Skip Sundays
 
       const isLate = Math.random() < 0.15;
@@ -252,19 +266,19 @@ async function main() {
       const minuteIn = isLate ? 30 + Math.floor(Math.random() * 30) : Math.floor(Math.random() * 30);
       const hourOut = isOvertime ? 18 + Math.floor(Math.random() * 2) : 17 + Math.floor(Math.random() * 1);
 
-      const timeIn = new Date(year, month, day, hourIn, minuteIn);
-      const timeOut = new Date(year, month, day, hourOut, Math.floor(Math.random() * 60));
+      const timeIn = manilaInstant(day, hourIn, minuteIn);
+      const timeOut = manilaInstant(day, hourOut, Math.floor(Math.random() * 60));
       const hoursWorked = Math.min((timeOut.getTime() - timeIn.getTime()) / (1000 * 60 * 60) - 1, 12);
 
       await prisma.attendance.create({
         data: {
           employeeId: employee.id,
           projectSiteId: employee.projectSiteId,
-          date: new Date(year, month, day),
+          date,
           timeIn,
           timeOut,
           hoursWorked: Math.round(hoursWorked * 100) / 100,
-          overtimeHours: isOvertime ? Math.max(0, Math.floor(Math.max(0, (timeOut.getTime() - new Date(year, month, day, 17, 0).getTime()) / (1000 * 60 * 60)))) : 0,
+          overtimeHours: isOvertime ? Math.max(0, Math.floor(Math.max(0, (timeOut.getTime() - manilaInstant(day, 17, 0).getTime()) / (1000 * 60 * 60)))) : 0,
           lateMinutes: isLate ? Math.round((hourIn * 60 + minuteIn - 8 * 60)) : 0,
           status: isLate ? "LATE" : "PRESENT",
         },
@@ -276,9 +290,9 @@ async function main() {
   const payrollPeriod = await prisma.payrollPeriod.create({
     data: {
       name: `${today.toLocaleString("en-US", { month: "long" })} 1-15, ${year}`,
-      startDate: new Date(year, month, 1),
-      endDate: new Date(year, month, 15),
-      payDate: new Date(year, month, 20),
+      startDate: dayStart(1),
+      endDate: dayStart(15),
+      payDate: dayStart(20),
       status: "DRAFT",
     },
   });

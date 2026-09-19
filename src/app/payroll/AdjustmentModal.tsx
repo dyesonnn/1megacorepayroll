@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { PH_TZ } from "@/lib/utils";
 
 interface PayrollRecord {
   id: string;
@@ -87,6 +88,7 @@ export default function AdjustmentModal({ record, onClose, onSave }: AdjustmentM
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString("en-PH", {
+      timeZone: PH_TZ,
       month: "short",
       day: "numeric",
       year: "numeric",

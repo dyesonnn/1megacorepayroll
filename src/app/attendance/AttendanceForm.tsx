@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { manilaNow } from "@/lib/utils";
 
 interface AttendanceFormProps {
   employees: { id: string; employeeNumber: string; firstName: string; lastName: string }[];
@@ -13,6 +14,9 @@ export default function AttendanceForm({ employees, sites }: AttendanceFormProps
   const [loading, setLoading] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [isError, setIsError] = useState(false);
+  // Today in Philippine time — the server (and possibly the browser) may run
+  // in another timezone, which would otherwise default the form to the wrong day.
+  const now = manilaNow();
 
   const handleSubmit = async (type: string, data: Record<string, string | null>) => {
     setLoading(data.employeeId || loading);
@@ -24,7 +28,7 @@ export default function AttendanceForm({ employees, sites }: AttendanceFormProps
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...data,
-          date: data.date || new Date().toISOString().split("T")[0],
+          date: data.date || manilaNow().date,
           type,
         }),
       });
@@ -122,7 +126,7 @@ export default function AttendanceForm({ employees, sites }: AttendanceFormProps
                 <option key={e.id} value={e.id}>{e.employeeNumber} - {e.firstName} {e.lastName}</option>
               ))}
             </select>
-            <input type="date" name="date" required defaultValue={new Date().toISOString().split("T")[0]} className="px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+            <input type="date" name="date" required defaultValue={now.date} className="px-3 py-2 border border-slate-300 rounded-lg text-sm" />
             <select name="projectSiteId" className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
               <option value="">Select Site (optional)</option>
               {sites.map((s) => (
@@ -162,14 +166,14 @@ export default function AttendanceForm({ employees, sites }: AttendanceFormProps
                   <option key={e.id} value={e.id}>{e.employeeNumber} - {e.firstName} {e.lastName}</option>
                 ))}
               </select>
-              <input type="date" name="date" required defaultValue={new Date().toISOString().split("T")[0]} className="px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+              <input type="date" name="date" required defaultValue={now.date} className="px-3 py-2 border border-slate-300 rounded-lg text-sm" />
               <select name="projectSiteId" className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
                 <option value="">Select Site</option>
                 {sites.map((s) => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </select>
-              <input type="time" name="timeIn" required defaultValue={new Date().toTimeString().slice(0, 5)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+              <input type="time" name="timeIn" required defaultValue={now.time} className="px-3 py-2 border border-slate-300 rounded-lg text-sm" />
             </div>
             <button
               type="submit"
@@ -190,8 +194,8 @@ export default function AttendanceForm({ employees, sites }: AttendanceFormProps
                   <option key={e.id} value={e.id}>{e.employeeNumber} - {e.firstName} {e.lastName}</option>
                 ))}
               </select>
-              <input type="date" name="date" required defaultValue={new Date().toISOString().split("T")[0]} className="px-3 py-2 border border-slate-300 rounded-lg text-sm" />
-              <input type="time" name="timeOut" required defaultValue={new Date().toTimeString().slice(0, 5)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+              <input type="date" name="date" required defaultValue={now.date} className="px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+              <input type="time" name="timeOut" required defaultValue={now.time} className="px-3 py-2 border border-slate-300 rounded-lg text-sm" />
             </div>
             <button
               type="submit"

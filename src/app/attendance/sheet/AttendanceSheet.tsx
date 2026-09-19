@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { formatTime24 } from "@/lib/utils";
 
 interface Employee {
   id: string;
@@ -87,12 +88,7 @@ export default function AttendanceSheet({
 
   const formatTime = (isoString: string | null) => {
     if (!isoString) return "—";
-    const date = new Date(isoString);
-    return date.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
+    return formatTime24(isoString);
   };
 
   const printRef = useRef<HTMLDivElement>(null);
@@ -293,7 +289,7 @@ export default function AttendanceSheet({
                             {/* Tooltip on hover */}
                             {hoveredCell?.empId === emp.id && hoveredCell?.day === day && (
                               <div className="absolute z-20 mt-1 bg-slate-900 text-white text-xs rounded-lg p-2 shadow-lg whitespace-nowrap">
-                                <div className="font-medium">{status}</div>
+                                <div className="font-medium">{record.status}</div>
                                 <div>In: {formatTime(record.timeIn)}</div>
                                 <div>Out: {formatTime(record.timeOut)}</div>
                                 <div>Hours: {record.hoursWorked}h</div>

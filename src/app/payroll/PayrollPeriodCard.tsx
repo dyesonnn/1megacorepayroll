@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { formatPeso } from "@/lib/utils";
+import { formatPeso, PH_TZ } from "@/lib/utils";
 import PayrollTable from "./PayrollTable";
 import ComputePayrollButton from "./ComputePayrollButton";
 import DeletePeriodButton from "./DeletePeriodButton";
@@ -75,7 +75,7 @@ export default function PayrollPeriodCard({ period, showControls, defaultExpande
               )}
             </div>
             <p className="text-xs text-slate-500">
-              Pay Date: {new Date(period.payDate).toLocaleDateString("en-PH")}
+              Pay Date: {new Date(period.payDate).toLocaleDateString("en-PH", { timeZone: PH_TZ })}
             </p>
           </div>
         </div>

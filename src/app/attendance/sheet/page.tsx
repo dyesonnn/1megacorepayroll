@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { utcMonthRange, manilaNow, dayKey } from "@/lib/utils";
 import DashboardLayout from "@/components/DashboardLayout";
 import AttendanceSheet from "./AttendanceSheet";
 
@@ -30,13 +31,14 @@ export default async function AttendanceSheetPage({
     year = y;
     month = m - 1; // Convert to 0-indexed
   } else {
-    const now = new Date();
-    year = now.getFullYear();
-    month = now.getMonth();
+    // Current month in Philippine time (the server may run in another timezone)
+    const [y, m] = manilaNow().date.split("-").map(Number);
+    year = y;
+    month = m - 1;
   }
 
-  const startOfMonth = new Date(year, month, 1);
-  const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59);
+  const monthKey = `${year}-${String(month + 1).padStart(2, "0")}`;
+  const { start: startOfMonth, end: endOfMonth } = utcMonthRange(monthKey);
 
   // Get all active employees
   const employees = await prisma.employee.findMany({
@@ -47,7 +49,7 @@ export default async function AttendanceSheetPage({
   // Get attendance for this month
   const attendance = await prisma.attendance.findMany({
     where: {
-      date: { gte: startOfMonth, lte: endOfMonth },
+      date: { gte: startOfMonth, lt: endOfMonth },
     },
     include: { projectSite: true },
     orderBy: [{ date: "asc" }, { timeIn: "asc" }],
@@ -56,7 +58,7 @@ export default async function AttendanceSheetPage({
   // Build attendance map: employeeId -> date -> record
   const attendanceMap = new Map<string, Map<string, typeof attendance[0]>>();
   for (const record of attendance) {
-    const dateKey = record.date.toISOString().split("T")[0];
+    const dateKey = dayKey(record.date);
     if (!attendanceMap.has(record.employeeId)) {
       attendanceMap.set(record.employeeId, new Map());
     }

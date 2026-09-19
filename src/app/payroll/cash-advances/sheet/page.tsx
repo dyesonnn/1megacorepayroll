@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { utcMonthRange, manilaNow, dayKey } from "@/lib/utils";
 import DashboardLayout from "@/components/DashboardLayout";
 import CashAdvanceSheet from "./CashAdvanceSheet";
 
@@ -30,13 +31,14 @@ export default async function CashAdvanceSheetPage({
     year = y;
     month = m - 1;
   } else {
-    const now = new Date();
-    year = now.getFullYear();
-    month = now.getMonth();
+    // Current month in Philippine time (the server may run in another timezone)
+    const [y, m] = manilaNow().date.split("-").map(Number);
+    year = y;
+    month = m - 1;
   }
 
-  const startOfMonth = new Date(year, month, 1);
-  const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59);
+  const monthKey = `${year}-${String(month + 1).padStart(2, "0")}`;
+  const { start: startOfMonth, end: endOfMonth } = utcMonthRange(monthKey);
 
   // Get all active employees
   const employees = await prisma.employee.findMany({
@@ -47,7 +49,7 @@ export default async function CashAdvanceSheetPage({
   // Get cash advances for this month
   const advances = await prisma.cashAdvance.findMany({
     where: {
-      advanceDate: { gte: startOfMonth, lte: endOfMonth },
+      advanceDate: { gte: startOfMonth, lt: endOfMonth },
     },
     include: {
       employee: {
@@ -60,7 +62,7 @@ export default async function CashAdvanceSheetPage({
   // Build cash advance map: employeeId -> date -> total amount
   const advanceMap = new Map<string, Map<string, number>>();
   for (const advance of advances) {
-    const dateKey = advance.advanceDate.toISOString().split("T")[0];
+    const dateKey = dayKey(advance.advanceDate);
     if (!advanceMap.has(advance.employeeId)) {
       advanceMap.set(advance.employeeId, new Map());
     }

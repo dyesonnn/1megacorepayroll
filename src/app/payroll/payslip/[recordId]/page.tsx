@@ -1,6 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { utcDayStart, dayKey } from "@/lib/utils";
 import PayslipViewer from "./PayslipViewer";
 import PayslipLogo from "./PayslipLogo";
 
@@ -11,15 +12,17 @@ function peso(amount: number): string {
   })}`;
 }
 
+// Period dates are date-only values stored at UTC midnight, so format them in
+// UTC — the shown day must not depend on the server's timezone.
 function formatPeriodCovered(start: Date, end: Date): string {
-  const startMonth = start.toLocaleString("en-PH", { month: "long" });
+  const startMonth = start.toLocaleString("en-PH", { month: "long", timeZone: "UTC" });
   const sameMonth =
-    start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear();
+    start.getUTCMonth() === end.getUTCMonth() && start.getUTCFullYear() === end.getUTCFullYear();
   if (sameMonth) {
-    return `${startMonth} ${start.getDate()}-${end.getDate()}, ${end.getFullYear()}`;
+    return `${startMonth} ${start.getUTCDate()}-${end.getUTCDate()}, ${end.getUTCFullYear()}`;
   }
-  const endMonth = end.toLocaleString("en-PH", { month: "long" });
-  return `${startMonth} ${start.getDate()} - ${endMonth} ${end.getDate()}, ${end.getFullYear()}`;
+  const endMonth = end.toLocaleString("en-PH", { month: "long", timeZone: "UTC" });
+  return `${startMonth} ${start.getUTCDate()} - ${endMonth} ${end.getUTCDate()}, ${end.getUTCFullYear()}`;
 }
 
 function PayRow({
@@ -75,11 +78,11 @@ export default async function PayslipPage({ params }: PayslipPageProps) {
   });
   const caTotal = advances.reduce((sum, a) => sum + a.amount, 0);
 
-  // Attendance within the period (for Absent / Late info rows)
-  const start = new Date(period.startDate);
-  const startOfDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-  const end = new Date(period.endDate);
-  const endOfDay = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1);
+  // Attendance within the period (for Absent / Late info rows). Period dates
+  // are stored as UTC midnight of the calendar day, so the window is built
+  // from their day keys — no server timezone involved.
+  const startOfDay = utcDayStart(dayKey(period.startDate));
+  const endOfDay = new Date(utcDayStart(dayKey(period.endDate)).getTime() + 24 * 60 * 60 * 1000);
 
   const attendance = await prisma.attendance.findMany({
     where: {
@@ -93,7 +96,7 @@ export default async function PayslipPage({ params }: PayslipPageProps) {
   const lateDeduction = lateMinutes * (employee.dailyRate / 480);
 
   const employeeName = `${employee.lastName}, ${employee.firstName}`.toUpperCase();
-  const periodCovered = formatPeriodCovered(startOfDay, new Date(end.getFullYear(), end.getMonth(), end.getDate()));
+  const periodCovered = formatPeriodCovered(startOfDay, utcDayStart(dayKey(period.endDate)));
   const overtimeHours = record.totalOvertimeHours.toFixed(2);
   // OT pay may be excluded for this period (e.g. lack of funds)
   const otExcluded = period.includeOvertimePay === false;

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { utcDayStart, utcMonthRange, dayKey, manilaNow } from "@/lib/utils";
 import DashboardLayout from "@/components/DashboardLayout";
 import AttendanceTable from "./AttendanceTable";
 import AttendanceForm from "./AttendanceForm";
@@ -30,22 +31,17 @@ export default async function AttendancePage({
     where.employeeId = session.employeeId;
   }
 
+  const DAY_MS = 24 * 60 * 60 * 1000;
   if (dateFilter) {
-    const date = new Date(dateFilter);
-    const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
-    where.date = { gte: startOfDay, lt: endOfDay };
+    const startOfDay = utcDayStart(dateFilter);
+    where.date = { gte: startOfDay, lt: new Date(startOfDay.getTime() + DAY_MS) };
   } else if (monthFilter) {
-    const [year, month] = monthFilter.split("-").map(Number);
-    const startOfMonth = new Date(year, month - 1, 1);
-    const endOfMonth = new Date(year, month, 1);
-    where.date = { gte: startOfMonth, lt: endOfMonth };
+    const { start, end } = utcMonthRange(monthFilter);
+    where.date = { gte: start, lt: end };
   } else {
-    // Default: current month
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    where.date = { gte: startOfMonth, lt: endOfMonth };
+    // Default: current month in Philippine time
+    const { start, end } = utcMonthRange(manilaNow().date);
+    where.date = { gte: start, lt: end };
   }
 
   const attendance = await prisma.attendance.findMany({
@@ -63,11 +59,13 @@ export default async function AttendancePage({
 
   const sites = await prisma.projectSite.findMany({ orderBy: { name: "asc" } });
 
-  // Holiday types keyed by yyyy-mm-dd so the table can badge HOLIDAY rows
-  const holidayRows = await prisma.holiday.findMany({ where });
-  const holidaysByDate = new Map(
-    holidayRows.map((h) => [h.date.toISOString().split("T")[0], h.type])
-  );
+  // Holiday types keyed by yyyy-mm-dd so the table can badge HOLIDAY rows.
+  // Only the date window matters here — reusing the attendance `where` would
+  // also filter holidays by employeeId and hide company-wide holidays.
+  const holidayRows = await prisma.holiday.findMany({
+    where: where.date ? { date: where.date } : undefined,
+  });
+  const holidaysByDate = new Map(holidayRows.map((h) => [dayKey(h.date), h.type]));
 
   return (
     <DashboardLayout userRole={session.role} userName={userName}>
@@ -108,7 +106,7 @@ export default async function AttendancePage({
             lateMinutes: a.lateMinutes,
             undertimeMinutes: a.undertimeMinutes,
             status: a.status,
-            holidayType: holidaysByDate.get(a.date.toISOString().split("T")[0]) ?? null,
+            holidayType: holidaysByDate.get(dayKey(a.date)) ?? null,
             siteName: a.projectSite?.name || "—",
           }))}
           showEmployeeName={session.role !== "EMPLOYEE"}

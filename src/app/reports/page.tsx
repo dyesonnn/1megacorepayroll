@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import DashboardLayout from "@/components/DashboardLayout";
-import { formatPeso } from "@/lib/utils";
+import { formatPeso, utcMonthRange, manilaNow } from "@/lib/utils";
 
 export default async function ReportsPage() {
   const session = await getSession();
@@ -35,10 +35,8 @@ export default async function ReportsPage() {
     0
   );
 
-  // Attendance summary (current month)
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  // Attendance summary (current month in Philippine time)
+  const { start: monthStart, end: monthEnd } = utcMonthRange(manilaNow().date);
 
   const monthlyAttendance = await prisma.attendance.groupBy({
     by: ["status"],

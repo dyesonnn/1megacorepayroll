@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { PH_TZ } from "@/lib/utils";
 
 interface Employee {
   id: string;
@@ -54,6 +55,7 @@ export default function CashAdvanceManager({ employees, initialAdvances, advance
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString("en-PH", {
+      timeZone: PH_TZ,
       month: "short",
       day: "numeric",
       year: "numeric",

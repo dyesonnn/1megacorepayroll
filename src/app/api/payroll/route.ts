@@ -1,16 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { utcDayStart, dayKey } from "@/lib/utils";
 
-// Local calendar-date key (yyyy-mm-dd) — attendance dates are stored as
-// local midnight, so this matches them reliably regardless of timezone
-// offset in the stored Date.
-function toLocalDateKey(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 export async function POST(request: NextRequest) {
   try {
@@ -47,17 +40,15 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Period not found" }, { status: 404 });
       }
 
-      // Normalize period dates to local start/end of day for correct comparison
-      // with attendance dates which are stored using local-time constructors
       // OT pay can be excluded for this period (e.g. due to lack of funds).
       // The choice is sent at compute time and stored on the period so the
       // table/payslips can reflect it until the next computation.
       const includeOvertime = body.includeOvertime !== false;
 
-      const start = new Date(period.startDate);
-      const startOfDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-      const end = new Date(period.endDate);
-      const endOfDay = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1);
+      // Period dates are stored as UTC midnight of the calendar day, so build
+      // the query window from their day keys — no server timezone involved.
+      const startOfDay = utcDayStart(dayKey(period.startDate));
+      const endOfDay = new Date(utcDayStart(dayKey(period.endDate)).getTime() + ONE_DAY_MS);
 
       // Get attendance for this period
       const attendance = await prisma.attendance.findMany({
@@ -74,7 +65,7 @@ export async function POST(request: NextRequest) {
         where: { date: { gte: startOfDay, lt: endOfDay } },
       });
       const holidayByDate = new Map(
-        holidays.map((h) => [toLocalDateKey(h.date), h])
+        holidays.map((h) => [dayKey(h.date), h])
       );
 
       // Find employee IDs that actually have attendance in this period
@@ -100,7 +91,7 @@ export async function POST(request: NextRequest) {
         // Calculate attendance-based pay
         const empAttendance = attendance.filter((a) => a.employeeId === emp.id);
         const attendanceByDate = new Map(
-          empAttendance.map((a) => [toLocalDateKey(a.date), a])
+          empAttendance.map((a) => [dayKey(a.date), a])
         );
 
         // "Days Worked" counts every day the employee showed up — including
@@ -120,7 +111,7 @@ export async function POST(request: NextRequest) {
           (a) =>
             a.status !== "ABSENT" &&
             a.status !== "REST_DAY" &&
-            !holidayByDate.has(toLocalDateKey(a.date))
+            !holidayByDate.has(dayKey(a.date))
         ).length;
         const totalOvertimeHours = empAttendance.reduce((sum, a) => sum + (a.overtimeHours || 0), 0);
 

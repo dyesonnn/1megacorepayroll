@@ -13,8 +13,82 @@ export function formatPeso(amount: number): string {
   }).format(amount).replace("PHP", "₱");
 }
 
+// ── Timezone handling ─────────────────────────────────
+// The business runs on Philippine time. Servers may run in any timezone
+// (production is UTC), so every date/time conversion is pinned to
+// Asia/Manila explicitly. The Philippines has no DST, so a plain +08:00
+// offset is always correct.
+//
+// Storage conventions:
+//   date-only columns (Attendance.date, Holiday.date) → UTC midnight of the
+//     calendar day, so `toISOString().slice(0, 10)` round-trips the day.
+//   times/instants (Attendance.timeIn/timeOut) → real instants; an "08:00"
+//     entry becomes 00:00Z (= 08:00 Manila), never 08:00Z.
+
+export const PH_TZ = "Asia/Manila";
+const PH_OFFSET = "+08:00";
+
+/** Normalize "8:00", "08:00" or "08:00:00" to "HH:MM". */
+function normalizeTimeString(time: string): string {
+  const match = /^(\d{1,2}):(\d{2})/.exec(time.trim());
+  if (!match) return time.trim();
+  return `${match[1].padStart(2, "0")}:${match[2]}`;
+}
+
+/**
+ * Combine a calendar day (yyyy-mm-dd) and a wall-clock time (HH:MM) into the
+ * instant HR actually means: that time in the Philippines.
+ */
+export function manilaDateTime(dateStr: string, timeStr: string): Date {
+  return new Date(`${dateStr.slice(0, 10)}T${normalizeTimeString(timeStr)}:00${PH_OFFSET}`);
+}
+
+/** Midnight UTC of a yyyy-mm-dd calendar day — the convention for date-only columns. */
+export function utcDayStart(dateStr: string): Date {
+  return new Date(`${dateStr.slice(0, 10)}T00:00:00.000Z`);
+}
+
+/** UTC [start, end) window covering a yyyy-mm month, for date-column queries. */
+export function utcMonthRange(monthStr: string): { start: Date; end: Date } {
+  const [year, month] = monthStr.slice(0, 7).split("-").map(Number);
+  return {
+    start: utcDayStart(`${year}-${String(month).padStart(2, "0")}-01`),
+    end: new Date(Date.UTC(year, month, 1)), // month is 1-based here → first of next month
+  };
+}
+
+/** yyyy-mm-dd key for a stored date-only value (UTC midnight). */
+export function dayKey(date: Date | string): string {
+  return new Date(date).toISOString().slice(0, 10);
+}
+
+/** Wall-clock "HH:MM" in the Philippines for a stored instant. */
+export function manilaTimeOf(date: Date): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: PH_TZ,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(new Date(date));
+}
+
+/** Today's calendar day and current wall-clock time in the Philippines. */
+export function manilaNow(): { date: string; time: string } {
+  const now = new Date();
+  return {
+    date: new Intl.DateTimeFormat("en-CA", {
+      timeZone: PH_TZ,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(now),
+    time: manilaTimeOf(now),
+  };
+}
+
 export function formatDate(date: Date | string): string {
   return new Date(date).toLocaleDateString("en-PH", {
+    timeZone: PH_TZ,
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -23,6 +97,7 @@ export function formatDate(date: Date | string): string {
 
 export function formatDateTime(date: Date | string): string {
   return new Date(date).toLocaleString("en-PH", {
+    timeZone: PH_TZ,
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -33,10 +108,21 @@ export function formatDateTime(date: Date | string): string {
 
 export function formatTime(date: Date | string): string {
   return new Date(date).toLocaleTimeString("en-PH", {
+    timeZone: PH_TZ,
     hour: "2-digit",
     minute: "2-digit",
     hour12: true,
   });
+}
+
+/** Same as formatTime but 24-hour ("08:00"). */
+export function formatTime24(date: Date | string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: PH_TZ,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(new Date(date));
 }
 
 export function getPayPeriodDates(startDate: Date, endDate: Date): Date[] {
