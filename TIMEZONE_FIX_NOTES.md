@@ -73,24 +73,45 @@ client rendered that instant → 4:00 PM. Day/month query windows and the
 Dry run by default; nothing is written without `--apply`.
 
 ```bash
-npx tsx prisma/fix-timezone.ts                       # report only
-npx tsx prisma/fix-timezone.ts --apply               # normalize date columns
-npx tsx prisma/fix-timezone.ts --shift-times --apply # also shift times -8h
+# report only
+npx tsx prisma/fix-timezone.ts
+# normalize date columns
+npx tsx prisma/fix-timezone.ts --apply
+# preview the -8h time shift, then apply it
+npx tsx prisma/fix-timezone.ts --shift-times --before=2026-09-19T13:00:00Z
+npx tsx prisma/fix-timezone.ts --shift-times --before=2026-09-19T13:00:00Z --apply
 ```
 
 - **Date normalization** is idempotent and safe everywhere: rows written on the
   Manila dev machine (Manila-midnight dates) get corrected, production rows
   (already UTC midnight) are untouched.
-- **`--shift-times`** subtracts 8h from every `timeIn/timeOut`. Only run it
-  against a database written by the **UTC** deployment — the current dev DB was
-  written on a Manila machine and its times are already correct (dry run showed
-  plausible 07:00/08:05 values, so do **not** shift locally).
+- **`--shift-times` requires `--before=<ISO>`** — the instant the fixed build
+  finished deploying (Railway's deployment log has it). Rows last updated at or
+  after that instant were written with the Manila offset and are left alone,
+  which also makes a repeated run a no-op instead of double-shifting. Without
+  the cut-off the script refuses to run.
+- Only run `--shift-times` against a database written by the **UTC** deployment.
+  The current dev DB was written on a Manila machine and its times are already
+  correct (the dry run shows plausible 07:00/08:05 values, so do **not** shift
+  locally).
+- The skipped rows are printed with their wall clocks so they can be eyeballed
+  (`in 08:00 / out 20:00` = fine, `in 16:00 / out 04:00` = still the old build).
 - `Holiday.date` rows that would collide on the unique index are reported and
   skipped for manual review.
 
-Production DB lives on the Railway volume at `/data/dev.db` — run the script
-against a downloaded copy, or via `railway run` with `DATABASE_URL` pointed at
-the volume.
+Production DB lives on the Railway volume at `/data/dev.db`. Download a copy
+(Railway volume browser), then run:
+
+```bash
+# put the copy at prisma/railway-dev.db — Prisma resolves file: paths from prisma/
+DATABASE_URL="file:./railway-dev.db" npx tsx prisma/fix-timezone.ts \
+  --shift-times --before=<deploy instant>
+DATABASE_URL="file:./railway-dev.db" npx tsx prisma/fix-timezone.ts \
+  --shift-times --before=<deploy instant> --apply
+```
+
+Then upload the file back over `/data/dev.db` (stop the service first — any
+attendance entered between download and upload is otherwise lost).
 
 ## Verification done this session
 
