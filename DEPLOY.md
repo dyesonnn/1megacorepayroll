@@ -77,7 +77,8 @@ In **Settings** → **Networking** → **Generate Domain**. HR logs in at that U
 - `npm start` →
   1. `prisma db push --skip-generate` — applies any schema changes (safe, non-destructive)
   2. `node prisma/seed-prod.js` — idempotent: only creates missing departments and the ADMIN/HR accounts; never touches existing data
-  3. `next start`
+  3. `node prisma/import-employees.js` — idempotent: imports the company employee rosters (1MEGACORE, Pauline's, Shared, 1MPRL, Laguna On-Call) once; skips people already in the database
+  4. `next start`
 
 ## Backups
 

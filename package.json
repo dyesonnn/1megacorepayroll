@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
-    "start": "prisma db push --skip-generate && node prisma/seed-prod.js && next start",
+    "start": "prisma db push --skip-generate && node prisma/seed-prod.js && node prisma/import-employees.js && next start",
     "lint": "eslint",
     "postinstall": "prisma skills sync || exit 0",
     "db:seed": "npx tsx prisma/seed.ts",
