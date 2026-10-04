@@ -1,7 +1,9 @@
 # Timezone bug: Time In 8:00 AM displays as 4:00 PM
 
-Status: **code fix implemented and verified. Remaining: run the data fix on the
-dev DB and on the production volume, then deploy.**
+Status: **code fix implemented and verified. Dev DB date normalization applied
+(2026-10-04: all 50 attendance dates moved from Manila-midnight to UTC-midnight;
+holiday was already UTC). Remaining: run the data fix on the production volume
+(its rows are already UTC-midnight, so expect a no-op report), then deploy.**
 
 ## Symptom
 

@@ -143,6 +143,7 @@ export default async function PayslipPage({ params }: PayslipPageProps) {
               <div className="px-5 py-3 flex flex-col min-h-[300px]">
                 <PayRow label="Basic Rate:" value={peso(employee.dailyRate)} />
                 <PayRow label="Days Worked:" value={String(record.daysWorked)} />
+                <PayRow label="Basic Pay:" value={peso(record.basicPay)} />
                 <Spacer />
                 <PayRow label="OT Hours:" value={overtimeHours} />
                 <PayRow

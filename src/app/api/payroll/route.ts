@@ -96,27 +96,20 @@ export async function POST(request: NextRequest) {
 
         // "Days Worked" counts every day the employee showed up — including
         // holidays worked — so the number matches what HR sees in attendance.
-        // Status HOLIDAY (holiday, not worked) is paid via holidayPay but is
-        // not a day the employee worked.
+        // Status HOLIDAY (holiday, not worked) is not a day the employee worked.
         const daysWorked = empAttendance.filter(
           (a) =>
             a.status !== "ABSENT" &&
             a.status !== "REST_DAY" &&
             a.status !== "HOLIDAY"
         ).length;
-        // Days that earn plain daily-rate basic pay: worked days excluding
-        // holiday days, since a worked holiday is paid in full (with premium)
-        // through holidayPay below — including it here would double-count it.
-        const basicPayDays = empAttendance.filter(
-          (a) =>
-            a.status !== "ABSENT" &&
-            a.status !== "REST_DAY" &&
-            !holidayByDate.has(dayKey(a.date))
-        ).length;
         const totalOvertimeHours = empAttendance.reduce((sum, a) => sum + (a.overtimeHours || 0), 0);
 
-      // Basic pay (prorated by plain paid days; worked holidays paid via holidayPay)
-      const basicPay = basicPayDays * emp.dailyRate;
+      // Basic pay covers every day worked — including holidays worked — so
+      // Days Worked × daily rate always matches the Basic Pay column. A worked
+      // holiday additionally earns a premium through holidayPay below
+      // (DOLE-style breakdown: base 100% in Basic Pay, premium in Holiday Pay).
+      const basicPay = daysWorked * emp.dailyRate;
 
       // Overtime pay (25% premium for regular OT). Skippable per period —
       // e.g. when funds are short, the period can be computed without OT pay.
@@ -124,10 +117,11 @@ export async function POST(request: NextRequest) {
         ? totalOvertimeHours * (emp.dailyRate / 8) * 1.25
         : 0;
 
-        // Holiday pay — company policy: NO WORK, NO PAY.
-        // A holiday only pays when the employee actually worked that day:
-        //   Regular holiday, worked:   200% (double pay)
-        //   Special holiday, worked:   130%
+        // Holiday premium — company policy: NO WORK, NO PAY. A holiday only
+        // pays a premium when the employee actually worked that day; the base
+        // 100% for the day is already in basicPay above, so a worked day totals:
+        //   Regular holiday, worked:   100% basic + 100% premium = 200%
+        //   Special holiday, worked:   100% basic +  30% premium = 130%
         //   Holiday, not worked:       ₱0 (no pay — no attendance that day)
         let holidayPay = 0;
         for (const [dateKey, holiday] of holidayByDate) {
@@ -139,9 +133,9 @@ export async function POST(request: NextRequest) {
             record.status !== "REST_DAY";
           if (!worked) continue; // no work, no pay
           if (holiday.type === "REGULAR") {
-            holidayPay += emp.dailyRate * 2; // double pay
+            holidayPay += emp.dailyRate; // +100% premium on top of basic
           } else if (holiday.type === "SPECIAL") {
-            holidayPay += emp.dailyRate * 1.3; // 130%
+            holidayPay += emp.dailyRate * 0.3; // +30% premium on top of basic
           }
         }
         holidayPay = Math.round(holidayPay * 100) / 100;
