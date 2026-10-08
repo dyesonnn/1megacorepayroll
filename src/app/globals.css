@@ -54,6 +54,31 @@ textarea:focus {
   outline: none;
 }
 
+/* Button hover glow
+   A deliberately restrained halo so buttons read as clickable without looking
+   neon: a 1px tinted ring plus a wide, low-opacity bloom in the app's accent
+   blue. Disabled buttons are excluded, and the colour transitions the buttons
+   already had (transition-colors) keep working since box-shadow is simply
+   added to the same property list. */
+button:not(:disabled) {
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, box-shadow;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+button:not(:disabled):hover,
+button:not(:disabled):focus-visible {
+  box-shadow:
+    0 0 0 1px rgb(59 130 246 / 0.18),
+    0 0 10px -2px rgb(59 130 246 / 0.28);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button:not(:disabled) {
+    transition-duration: 0ms;
+  }
+}
+
 /* Print styles for payslips */
 @media print {
   .no-print {
