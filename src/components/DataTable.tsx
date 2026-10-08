@@ -43,8 +43,11 @@ export default function DataTable({
     return sortDir === "asc" ? cmp : -cmp;
   });
 
-  const totalPages = Math.ceil(sorted.length / pageSize);
-  const paginated = sorted.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  // Searching or filtering can leave the current page past the end of the
+  // remaining rows, which would show an empty table.
+  const safePage = Math.min(currentPage, totalPages);
+  const paginated = sorted.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   const handleSort = (key: string) => {
     if (sortKey === key) {
@@ -116,19 +119,19 @@ export default function DataTable({
       {totalPages > 1 && (
         <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200">
           <p className="text-sm text-slate-500">
-            Showing {(currentPage - 1) * pageSize + 1} to{" "}
-            {Math.min(currentPage * pageSize, sorted.length)} of {sorted.length}
+            Showing {(safePage - 1) * pageSize + 1} to{" "}
+            {Math.min(safePage * pageSize, sorted.length)} of {sorted.length}
           </p>
           <div className="flex gap-1">
             <button
-              onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-              disabled={currentPage === 1}
+              onClick={() => setCurrentPage(Math.max(1, safePage - 1))}
+              disabled={safePage === 1}
               className="px-3 py-1 text-sm rounded border border-slate-300 hover:bg-slate-100 disabled:opacity-50"
             >
               Prev
             </button>
             {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-              const page = currentPage <= 3 ? i + 1 : currentPage - 2 + i;
+              const page = safePage <= 3 ? i + 1 : safePage - 2 + i;
               if (page > totalPages || page < 1) return null;
               return (
                 <button
@@ -136,7 +139,7 @@ export default function DataTable({
                   onClick={() => setCurrentPage(page)}
                   className={cn(
                     "px-3 py-1 text-sm rounded border",
-                    currentPage === page
+                    safePage === page
                       ? "bg-blue-600 text-white border-blue-600"
                       : "border-slate-300 hover:bg-slate-100"
                   )}
@@ -146,8 +149,8 @@ export default function DataTable({
               );
             })}
             <button
-              onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage(Math.min(totalPages, safePage + 1))}
+              disabled={safePage === totalPages}
               className="px-3 py-1 text-sm rounded border border-slate-300 hover:bg-slate-100 disabled:opacity-50"
             >
               Next
