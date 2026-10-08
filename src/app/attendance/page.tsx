@@ -67,6 +67,12 @@ export default async function AttendancePage({
   });
   const holidaysByDate = new Map(holidayRows.map((h) => [dayKey(h.date), h.type]));
 
+  // The marking form accepts any date, so it gets the full holiday list — not
+  // just the month on screen — to know when "Regular Day" would remove one.
+  const formHolidays = session.role !== "EMPLOYEE"
+    ? await prisma.holiday.findMany({ orderBy: { date: "asc" } })
+    : [];
+
   return (
     <DashboardLayout userRole={session.role} userName={userName}>
       <div className="p-6">
@@ -89,7 +95,11 @@ export default async function AttendancePage({
 
         {/* Attendance Form (Admin/HR only) */}
         {session.role !== "EMPLOYEE" && (
-          <AttendanceForm employees={employees} sites={sites} />
+          <AttendanceForm
+            employees={employees}
+            sites={sites}
+            holidays={formHolidays.map((h) => ({ date: dayKey(h.date), type: h.type }))}
+          />
         )}
 
         {/* Attendance Table */}

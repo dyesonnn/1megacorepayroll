@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
   try {
     await requireAuth(["ADMIN", "HR"]);
     const body = await request.json();
-    const { employeeId, projectSiteId, date, timeIn, timeOut, status, type, id, lateMinutes, hoursWorked, overtimeHours, undertimeMinutes, holidayType } = body;
+    const { employeeId, projectSiteId, date, timeIn, timeOut, status, type, id, lateMinutes, hoursWorked, overtimeHours, undertimeMinutes, holidayType, clearHoliday } = body;
 
     if (!employeeId || !date) {
       return NextResponse.json({ error: "Employee and date are required" }, { status: 400 });
@@ -117,8 +117,9 @@ export async function POST(request: NextRequest) {
     //   REGULAR → double pay (200%) when worked, 100% even if absent
     //   SPECIAL → 130% when worked, no pay if absent
     // A holiday is company-wide, so this upsert affects every employee's pay
-    // for that date. "Regular Day" never deletes a declared holiday — remove
-    // holidays from the Holidays page instead.
+    // for that date. Choosing "Regular Day" is the opposite move: it removes
+    // the date's holiday (see clearHoliday below), so the form asks HR to
+    // confirm before submitting because the effect is company-wide too.
     const upsertHoliday = async (fallbackType?: string) => {
       const dayHoliday = await prisma.holiday.findFirst({
         where: { date: { gte: startOfDay, lt: endOfDay } },
@@ -145,6 +146,17 @@ export async function POST(request: NextRequest) {
 
       if (status === "HOLIDAY" || validHolidayType !== null) {
         await upsertHoliday();
+      } else if (clearHoliday === true) {
+        // HR picked "Day Type: Regular Day" on a date that is registered as a
+        // holiday and confirmed it is an ordinary working day. Drop the
+        // company-wide holiday, otherwise payroll keeps paying the premium to
+        // everyone marked that day no matter which day type was chosen here.
+        const dayHoliday = await prisma.holiday.findFirst({
+          where: { date: { gte: startOfDay, lt: endOfDay } },
+        });
+        if (dayHoliday) {
+          await prisma.holiday.delete({ where: { id: dayHoliday.id } });
+        }
       }
 
       if (existing) {

@@ -2,14 +2,17 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { manilaNow } from "@/lib/utils";
+import { formatDate, manilaNow } from "@/lib/utils";
 
 interface AttendanceFormProps {
   employees: { id: string; employeeNumber: string; firstName: string; lastName: string }[];
   sites: { id: string; name: string }[];
+  // Every registered holiday (yyyy-mm-dd + type). A marking can be submitted
+  // for any date, so the form needs the whole list to warn about clearing one.
+  holidays: { date: string; type: string }[];
 }
 
-export default function AttendanceForm({ employees, sites }: AttendanceFormProps) {
+export default function AttendanceForm({ employees, sites, holidays }: AttendanceFormProps) {
   const router = useRouter();
   const [loading, setLoading] = useState<string | null>(null);
   const [message, setMessage] = useState("");
@@ -18,8 +21,8 @@ export default function AttendanceForm({ employees, sites }: AttendanceFormProps
   // in another timezone, which would otherwise default the form to the wrong day.
   const now = manilaNow();
 
-  const handleSubmit = async (type: string, data: Record<string, string | null>) => {
-    setLoading(data.employeeId || loading);
+  const handleSubmit = async (type: string, data: Record<string, string | boolean | null>) => {
+    setLoading(typeof data.employeeId === "string" ? data.employeeId : loading);
     setMessage("");
 
     try {
@@ -40,15 +43,7 @@ export default function AttendanceForm({ employees, sites }: AttendanceFormProps
         return false;
       }
 
-      setMessage(type === "status"
-        ? (data.holidayType === "SPECIAL" ? "Marked as Special Holiday (130% pay when worked)!"
-          : data.holidayType === "REGULAR" ? "Marked as Regular Holiday (double pay when worked)!"
-          : data.status === "PRESENT" ? "Marked as Present!"
-          : data.status === "HALF_DAY" ? "Marked as Half Day!"
-          : "Marked as Absent!")
-        : type === "timein"
-          ? "Time-in logged successfully!"
-          : "Time-out logged successfully!");
+      setMessage(successMessage(type, data));
       setIsError(false);
       router.refresh();
       return true;
@@ -59,6 +54,17 @@ export default function AttendanceForm({ employees, sites }: AttendanceFormProps
     } finally {
       setLoading(null);
     }
+  };
+
+  const successMessage = (type: string, data: Record<string, string | boolean | null>) => {
+    if (type === "timein") return "Time-in logged successfully!";
+    if (type === "timeout") return "Time-out logged successfully!";
+    if (data.holidayType === "SPECIAL") return "Marked as Special Holiday (130% pay when worked)!";
+    if (data.holidayType === "REGULAR") return "Marked as Regular Holiday (double pay when worked)!";
+    if (data.clearHoliday) return "Marked on a Regular Day — the holiday for this date was removed, so no holiday pay applies.";
+    if (data.status === "HALF_DAY") return "Marked as Half Day!";
+    if (data.status === "ABSENT") return "Marked as Absent!";
+    return "Marked as Present!";
   };
 
   const handleTimeIn = (e: React.FormEvent<HTMLFormElement>) => {
@@ -86,16 +92,36 @@ export default function AttendanceForm({ employees, sites }: AttendanceFormProps
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     const status = (form.get("status") as string) || "PRESENT";
+    const date = (form.get("date") as string) || now.date;
     // Day Type is a separate selector: Holiday (double pay) or Special Holiday
     // (130% pay) registers the date in the Holiday table so payroll adds the
     // premium automatically. The employee keeps their normal status.
     const holidayType = form.get("holidayType") as string | null;
+    const pickedHoliday = holidayType === "REGULAR" || holidayType === "SPECIAL";
+
+    // A holiday is company-wide, so "Regular Day" on a date that is already a
+    // holiday removes the premium for everyone marked that day. The selector
+    // defaults to Regular Day, so confirm before submitting — otherwise a
+    // normal mark on a real holiday would quietly wipe it.
+    const registered = holidays.find((h) => h.date === date);
+    let clearHoliday = false;
+    if (!pickedHoliday && registered) {
+      const label = registered.type === "SPECIAL" ? "Special Holiday" : "Regular Holiday";
+      const confirmed = window.confirm(
+        `${formatDate(date)} is registered as a ${label}, so everyone marked that day earns holiday pay.\n\n` +
+          "Mark it as a Regular Day and remove the holiday for this date?"
+      );
+      if (!confirmed) return;
+      clearHoliday = true;
+    }
+
     handleSubmit("status", {
       employeeId: form.get("employeeId") as string,
       projectSiteId: form.get("projectSiteId") as string || null,
-      date: form.get("date") as string,
+      date,
       status,
-      holidayType: holidayType === "REGULAR" || holidayType === "SPECIAL" ? holidayType : null,
+      holidayType: pickedHoliday ? holidayType : null,
+      clearHoliday,
       timeIn: form.get("timeIn") as string || null,
       timeOut: form.get("timeOut") as string || null,
     });
