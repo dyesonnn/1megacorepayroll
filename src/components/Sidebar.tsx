@@ -94,7 +94,7 @@ export default function Sidebar({ userRole, userName }: SidebarProps) {
         </div>
         <a
           href="/api/auth/logout"
-          className="flex items-center justify-center gap-2 w-full px-3 py-2 bg-slate-700 hover:bg-red-600 text-slate-300 hover:text-white text-sm rounded-lg transition-colors"
+          className="btn-glow flex items-center justify-center gap-2 w-full px-3 py-2 bg-slate-700 hover:bg-red-600 text-slate-300 hover:text-white text-sm rounded-lg transition-colors"
         >
           <span>🚪</span>
           <span>Logout</span>

@@ -73,8 +73,95 @@ button:not(:disabled):focus-visible {
     0 0 10px -2px rgb(59 130 246 / 0.28);
 }
 
+/* Cursor-tracked light on buttons
+   A thin band of light runs around the control's border and follows the
+   crosshair: the conic gradient's bright segment is centred on the heading
+   from the control's centre to the pointer, so whichever edge the cursor is
+   nearest lights up. ButtonGlow (src/components/ButtonGlow.tsx) supplies
+   --glow-angle and --glow-light; links that are styled as buttons opt in with
+   .btn-glow so nav links keep their plain hover. */
+@property --glow-angle {
+  syntax: "<angle>";
+  inherits: true;
+  initial-value: 0deg;
+}
+
+@layer base {
+  /* containing block for the ring and the bloom */
+  button:not(:disabled),
+  .btn-glow {
+    position: relative;
+  }
+}
+
+:is(button:not(:disabled), .btn-glow)::after,
+:is(button:not(:disabled), .btn-glow)::before {
+  content: "";
+  position: absolute;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: conic-gradient(
+    from calc(var(--glow-angle, 0deg) - 30deg),
+    transparent 0deg,
+    rgb(var(--glow-light, 59 130 246) / 0) 4deg,
+    rgb(var(--glow-light, 59 130 246) / 0.2) 17deg,
+    rgb(var(--glow-light, 59 130 246) / 0.8) 25deg,
+    rgb(var(--glow-light, 59 130 246) / 1) 30deg,
+    rgb(var(--glow-light, 59 130 246) / 0.8) 35deg,
+    rgb(var(--glow-light, 59 130 246) / 0.2) 43deg,
+    rgb(var(--glow-light, 59 130 246) / 0) 56deg,
+    transparent 360deg
+  );
+  transition:
+    opacity 200ms ease-out,
+    --glow-angle 90ms linear;
+}
+
+/* The light itself: a hairline band sitting on the border. */
+:is(button:not(:disabled), .btn-glow)::after {
+  inset: 0;
+  padding: 1.5px;
+}
+
+/* A wider, blurred copy so the light bleeds just past the border. */
+:is(button:not(:disabled), .btn-glow)::before {
+  inset: -1px;
+  padding: 3px;
+  filter: blur(5px);
+}
+
+:is(button:not(:disabled), .btn-glow)::after,
+:is(button:not(:disabled), .btn-glow)::before {
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+
+:is(button:not(:disabled), .btn-glow):hover::after,
+:is(button:not(:disabled), .btn-glow):focus-visible::after,
+:is(button:not(:disabled), .btn-glow).glow-on::after {
+  opacity: 1;
+}
+
+:is(button:not(:disabled), .btn-glow):hover::before,
+:is(button:not(:disabled), .btn-glow):focus-visible::before,
+:is(button:not(:disabled), .btn-glow).glow-on::before {
+  opacity: 0.5;
+}
+
 @media (prefers-reduced-motion: reduce) {
   button:not(:disabled) {
+    transition-duration: 0ms;
+  }
+
+  :is(button:not(:disabled), .btn-glow)::after,
+  :is(button:not(:disabled), .btn-glow)::before {
     transition-duration: 0ms;
   }
 }
@@ -92,6 +179,12 @@ button:not(:disabled):focus-visible {
   .print-payslip {
     border: 1px solid #000;
     padding: 20px;
+  }
+
+  /* never print the hover light */
+  :is(button:not(:disabled), .btn-glow)::after,
+  :is(button:not(:disabled), .btn-glow)::before {
+    display: none;
   }
 
   /* Payslip page: print only the sheet, full width, black on white */

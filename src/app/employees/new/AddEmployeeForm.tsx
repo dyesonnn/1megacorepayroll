@@ -198,7 +198,7 @@ export default function AddEmployeeForm({ departments, sites, skills }: AddEmplo
       <div className="flex gap-3 justify-end">
         <a
           href="/employees"
-          className="px-6 py-2.5 text-sm border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+          className="btn-glow px-6 py-2.5 text-sm border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
         >
           Cancel
         </a>
