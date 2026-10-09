@@ -26,11 +26,26 @@ export default async function PayrollPage() {
     orderBy: { startDate: "desc" },
     include: {
       records: {
-        include: { employee: true },
+        include: {
+          employee: true,
+          // Advances deducted through this record (shown in the CA column)
+          cashAdvances: { where: { status: "DEDUCTED" }, select: { amount: true } },
+        },
         orderBy: { employee: { employeeNumber: "asc" } },
       },
     },
   });
+
+  // Outstanding cash advances per employee — pending, not yet deducted in any
+  // payroll. Surfaced on the payroll page so HR is aware before adjusting.
+  const pendingAdvanceGroups = await prisma.cashAdvance.groupBy({
+    by: ["employeeId"],
+    where: { status: "PENDING" },
+    _sum: { amount: true },
+  });
+  const pendingAdvanceByEmployee = new Map(
+    pendingAdvanceGroups.map((g) => [g.employeeId, g._sum.amount ?? 0])
+  );
 
   const totalActiveEmployees = await prisma.employee.count({
     where: { employmentStatus: "ACTIVE" },
@@ -90,6 +105,8 @@ export default async function PayrollPage() {
                     netPay: r.netPay,
                     daysWorked: r.daysWorked,
                     paid: r.paid,
+                    cashAdvance: r.cashAdvances.reduce((sum, a) => sum + a.amount, 0),
+                    pendingCashAdvance: pendingAdvanceByEmployee.get(r.employeeId) ?? 0,
                   })),
                 }}
                 showControls={session.role !== "EMPLOYEE"}

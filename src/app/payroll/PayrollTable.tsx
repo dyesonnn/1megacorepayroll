@@ -27,6 +27,8 @@ interface PayrollRecord {
   netPay: number;
   daysWorked: number;
   paid: boolean;
+  cashAdvance: number;
+  pendingCashAdvance: number;
 }
 
 interface PayrollTableProps {
@@ -57,6 +59,9 @@ export default function PayrollTable({ records, showEmployeeName, periodId, peri
       prev.map((r) => (r.id === updatedRecord.id ? updatedRecord : r))
     );
     setAdjustingRecord(null);
+    // Re-fetch from the server so the Cash Advance column and pending badge
+    // reflect the advances that were actually deducted or released.
+    router.refresh();
   };
 
   const handleMarkAsPaid = async (recordId: string) => {
@@ -176,6 +181,28 @@ export default function PayrollTable({ records, showEmployeeName, periodId, peri
       render: (item: PayrollRecord) => <span className="text-red-600">({formatPeso(item.totalDeductions)})</span>,
     },
     {
+      key: "cashAdvance",
+      label: "Cash Advance",
+      sortable: true,
+      render: (item: PayrollRecord) => (
+        <div>
+          {item.cashAdvance > 0 ? (
+            <span className="text-red-600">({formatPeso(item.cashAdvance)})</span>
+          ) : (
+            <span className="text-slate-400">—</span>
+          )}
+          {showEmployeeName && item.pendingCashAdvance > 0 && (
+            <p
+              className="text-xs text-amber-600 whitespace-nowrap"
+              title="Outstanding cash advance not yet deducted. Open Adjust to include it."
+            >
+              ⚠ {formatPeso(item.pendingCashAdvance)} pending
+            </p>
+          )}
+        </div>
+      ),
+    },
+    {
       key: "netPay",
       label: "Net Pay",
       sortable: true,
@@ -255,8 +282,10 @@ export default function PayrollTable({ records, showEmployeeName, periodId, peri
       otherDeductions: acc.otherDeductions + r.otherDeductions,
       totalDeductions: acc.totalDeductions + r.totalDeductions,
       netPay: acc.netPay + r.netPay,
+      cashAdvance: acc.cashAdvance + r.cashAdvance,
+      pendingCashAdvance: acc.pendingCashAdvance + r.pendingCashAdvance,
     }),
-    { basicPay: 0, overtimePay: 0, holidayPay: 0, bonuses: 0, doublePay: 0, grossPay: 0, otherDeductions: 0, totalDeductions: 0, netPay: 0 }
+    { basicPay: 0, overtimePay: 0, holidayPay: 0, bonuses: 0, doublePay: 0, grossPay: 0, otherDeductions: 0, totalDeductions: 0, netPay: 0, cashAdvance: 0, pendingCashAdvance: 0 }
   );
 
   return (
@@ -299,6 +328,16 @@ export default function PayrollTable({ records, showEmployeeName, periodId, peri
             <span className="text-slate-600">Total Other Deductions:</span>
             <span className="font-medium text-red-600">({formatPeso(totals.otherDeductions)})</span>
           </div>
+          <div className="flex justify-between">
+            <span className="text-slate-600">Total Cash Advances:</span>
+            <span className="font-medium text-red-600">({formatPeso(totals.cashAdvance)})</span>
+          </div>
+          {showEmployeeName && totals.pendingCashAdvance > 0 && (
+            <div className="flex justify-between">
+              <span className="text-slate-600">Pending Cash Advances (not deducted):</span>
+              <span className="font-medium text-amber-600">{formatPeso(totals.pendingCashAdvance)}</span>
+            </div>
+          )}
           <div className="flex justify-between">
             <span className="text-slate-600">Total Deductions:</span>
             <span className="font-medium text-red-600">({formatPeso(totals.totalDeductions)})</span>

@@ -24,6 +24,8 @@ interface PayrollRecord {
   netPay: number;
   daysWorked: number;
   paid: boolean;
+  cashAdvance: number;
+  pendingCashAdvance: number;
 }
 
 interface CashAdvance {
@@ -181,6 +183,13 @@ export default function AdjustmentModal({ record, onClose, onSave }: AdjustmentM
         employeeName: record.employeeName,
         employeeNumber: record.employeeNumber,
         employeeId: record.employeeId,
+        // Reflect the advances just deducted/released in the CA column until
+        // the server refresh lands with the authoritative values.
+        cashAdvance: record.cashAdvance + totalSelectedAdvanceAmount,
+        pendingCashAdvance: Math.max(
+          0,
+          record.pendingCashAdvance - totalSelectedAdvanceAmount
+        ),
       });
       onClose();
     } catch {

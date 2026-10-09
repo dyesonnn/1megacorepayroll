@@ -27,6 +27,8 @@ interface PayrollRecord {
   netPay: number;
   daysWorked: number;
   paid: boolean;
+  cashAdvance: number;
+  pendingCashAdvance: number;
 }
 
 interface PayrollPeriodCardProps {
