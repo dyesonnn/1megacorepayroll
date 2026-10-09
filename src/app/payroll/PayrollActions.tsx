@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 interface PayrollActionsProps {
@@ -99,6 +100,12 @@ export default function PayrollActions({ totalActiveEmployees }: PayrollActionsP
         >
           + Create Payroll Period
         </button>
+        <Link
+          href="/payroll/payslips"
+          className="px-4 py-2 bg-white text-slate-700 text-sm font-medium rounded-lg border border-slate-300 hover:bg-slate-50 transition-colors"
+        >
+          🖨️ Print Payslips
+        </Link>
       </div>
 
       {showCreatePeriod && (

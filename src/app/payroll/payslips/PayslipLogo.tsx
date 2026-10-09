@@ -6,13 +6,19 @@ import { useState } from "react";
 // if none exist. Drop your logo in `public/` as logo.png (or .jpg/.svg/.webp).
 const EXTENSIONS = ["png", "jpg", "jpeg", "svg", "webp"];
 
-export default function PayslipLogo() {
+export default function PayslipLogo({
+  className = "w-28 h-9",
+}: {
+  className?: string;
+}) {
   const [attempt, setAttempt] = useState(0);
 
   if (attempt >= EXTENSIONS.length) {
     return (
-      <div className="w-44 h-16 border border-black flex items-center justify-center flex-none">
-        <span className="text-[10px] tracking-widest text-slate-400">
+      <div
+        className={`${className} border border-black flex items-center justify-center flex-none`}
+      >
+        <span className="text-[8px] tracking-widest text-slate-400">
           COMPANY LOGO
         </span>
       </div>
@@ -25,7 +31,7 @@ export default function PayslipLogo() {
       src={`/logo.${EXTENSIONS[attempt]}`}
       alt="Company logo"
       onError={() => setAttempt((i) => i + 1)}
-      className="w-44 h-16 object-contain flex-none"
+      className={`${className} object-contain flex-none`}
     />
   );
 }

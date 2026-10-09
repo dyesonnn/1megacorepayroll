@@ -215,9 +215,13 @@ export default function PayrollTable({ records, showEmployeeName, periodId, peri
       label: "Payslip",
       render: (item: PayrollRecord) => (
         <button
-          onClick={() => router.push(`/payroll/payslip/${item.id}`)}
+          onClick={() =>
+            router.push(
+              `/payroll/payslips?periodId=${periodId}&employeeId=${item.employeeId}`
+            )
+          }
           className="px-3 py-1 text-sm text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
-          title="View print-ready payslip"
+          title="Print this employee's payslip"
         >
           🧾 Payslip
         </button>

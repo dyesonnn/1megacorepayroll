@@ -187,32 +187,4 @@ button:not(:disabled):focus-visible {
     display: none;
   }
 
-  /* Payslip page: print only the sheet, full width, black on white */
-  body:has(#print-area) {
-    background: white;
-  }
-
-  body:has(#print-area) > div {
-    padding: 0 !important;
-    margin: 0 !important;
-    background: white !important;
-    min-height: auto !important;
-  }
-
-  body:has(#print-area) #print-area {
-    position: absolute;
-    inset: 0;
-  }
-
-  #print-area .payslip-sheet {
-    width: 100% !important;
-    max-width: none !important;
-    border: 1px solid #000;
-    border-radius: 0;
-  }
-
-  /* Reset zoom transform when printing */
-  #print-area > div {
-    transform: none !important;
-  }
 }
