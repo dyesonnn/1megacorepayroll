@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatDate, manilaNow } from "@/lib/utils";
+import EmployeePicker from "@/components/EmployeePicker";
 
 interface AttendanceFormProps {
   employees: { id: string; employeeNumber: string; firstName: string; lastName: string }[];
@@ -67,11 +68,25 @@ export default function AttendanceForm({ employees, sites, holidays }: Attendanc
     return "Marked as Present!";
   };
 
+  // The employee comes from the search picker, so a typed-but-unpicked name
+  // leaves the field empty. Report it here rather than posting an empty id.
+  const requireEmployee = (form: FormData): string | null => {
+    const employeeId = form.get("employeeId") as string;
+    if (!employeeId) {
+      setMessage("Search and select an employee first.");
+      setIsError(true);
+      return null;
+    }
+    return employeeId;
+  };
+
   const handleTimeIn = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
+    const employeeId = requireEmployee(form);
+    if (!employeeId) return;
     handleSubmit("timein", {
-      employeeId: form.get("employeeId") as string,
+      employeeId,
       projectSiteId: form.get("projectSiteId") as string || null,
       date: form.get("date") as string,
       timeIn: form.get("timeIn") as string,
@@ -81,8 +96,10 @@ export default function AttendanceForm({ employees, sites, holidays }: Attendanc
   const handleTimeOut = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
+    const employeeId = requireEmployee(form);
+    if (!employeeId) return;
     handleSubmit("timeout", {
-      employeeId: form.get("employeeId") as string,
+      employeeId,
       date: form.get("date") as string,
       timeOut: form.get("timeOut") as string,
     });
@@ -91,6 +108,8 @@ export default function AttendanceForm({ employees, sites, holidays }: Attendanc
   const handleStatus = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
+    const employeeId = requireEmployee(form);
+    if (!employeeId) return;
     const status = (form.get("status") as string) || "PRESENT";
     const date = (form.get("date") as string) || now.date;
     // Day Type is a separate selector: Holiday (double pay) or Special Holiday
@@ -116,7 +135,7 @@ export default function AttendanceForm({ employees, sites, holidays }: Attendanc
     }
 
     handleSubmit("status", {
-      employeeId: form.get("employeeId") as string,
+      employeeId,
       projectSiteId: form.get("projectSiteId") as string || null,
       date,
       status,
@@ -146,12 +165,7 @@ export default function AttendanceForm({ employees, sites, holidays }: Attendanc
           <p className="text-xs text-slate-500 mb-4">Just mark Present or Absent — time calculations are automatic</p>
 
           <form onSubmit={handleStatus} className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <select name="employeeId" required className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
-              <option value="">Select Employee</option>
-              {employees.map((e) => (
-                <option key={e.id} value={e.id}>{e.employeeNumber} - {e.firstName} {e.lastName}</option>
-              ))}
-            </select>
+            <EmployeePicker employees={employees} />
             <input type="date" name="date" required defaultValue={now.date} className="px-3 py-2 border border-slate-300 rounded-lg text-sm" />
             <select name="projectSiteId" className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
               <option value="">Select Site (optional)</option>
@@ -186,12 +200,7 @@ export default function AttendanceForm({ employees, sites, holidays }: Attendanc
           <form onSubmit={handleTimeIn} className="space-y-3">
             <h3 className="font-medium text-slate-700 text-sm">Time In (with auto calc)</h3>
             <div className="grid grid-cols-2 gap-3">
-              <select name="employeeId" required className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
-                <option value="">Select Employee</option>
-                {employees.map((e) => (
-                  <option key={e.id} value={e.id}>{e.employeeNumber} - {e.firstName} {e.lastName}</option>
-                ))}
-              </select>
+              <EmployeePicker employees={employees} />
               <input type="date" name="date" required defaultValue={now.date} className="px-3 py-2 border border-slate-300 rounded-lg text-sm" />
               <select name="projectSiteId" className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
                 <option value="">Select Site</option>
@@ -214,12 +223,7 @@ export default function AttendanceForm({ employees, sites, holidays }: Attendanc
           <form onSubmit={handleTimeOut} className="space-y-3">
             <h3 className="font-medium text-slate-700 text-sm">Time Out (with auto calc)</h3>
             <div className="grid grid-cols-2 gap-3">
-              <select name="employeeId" required className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
-                <option value="">Select Employee</option>
-                {employees.map((e) => (
-                  <option key={e.id} value={e.id}>{e.employeeNumber} - {e.firstName} {e.lastName}</option>
-                ))}
-              </select>
+              <EmployeePicker employees={employees} />
               <input type="date" name="date" required defaultValue={now.date} className="px-3 py-2 border border-slate-300 rounded-lg text-sm" />
               <input type="time" name="timeOut" required defaultValue={now.time} className="px-3 py-2 border border-slate-300 rounded-lg text-sm" />
             </div>

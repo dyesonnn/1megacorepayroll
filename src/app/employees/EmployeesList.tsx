@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import DataTable, { type Column } from "@/components/DataTable";
-import { formatDate } from "@/lib/utils";
+import { formatDate, normalizeForSearch } from "@/lib/utils";
 
 interface EmployeeRow {
   id: string;
@@ -26,21 +26,8 @@ interface EmployeesListProps {
   currentFilters: { department: string; status: string; site: string };
 }
 
-/**
- * Lower-cased and accent-free, so "banaria" still finds "Bañaria". Combining
- * accents live in U+0300-U+036F once the name is decomposed.
- */
-const normalize = (value: string) =>
-  [...value.normalize("NFD")]
-    .filter((char) => {
-      const code = char.charCodeAt(0);
-      return code < 0x300 || code > 0x36f;
-    })
-    .join("")
-    .toLowerCase();
-
 const searchableName = (employee: EmployeeRow) =>
-  normalize(
+  normalizeForSearch(
     [employee.firstName, employee.middleName, employee.lastName, employee.suffix]
       .filter(Boolean)
       .join(" "),
@@ -60,7 +47,7 @@ export default function EmployeesList({ employees, departments, sites, currentFi
 
   // Names are matched word by word so "banaria jayson" and "jayson banaria"
   // both find the same person.
-  const searchWords = normalize(nameQuery)
+  const searchWords = normalizeForSearch(nameQuery)
     .split(/\s+/)
     .filter(Boolean);
   const shown = searchWords.length

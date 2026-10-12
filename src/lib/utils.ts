@@ -13,6 +13,21 @@ export function formatPeso(amount: number): string {
   }).format(amount).replace("PHP", "₱");
 }
 
+/**
+ * Lower-cased and accent-free, so "banaria" still finds "Bañaria". Combining
+ * accents live in U+0300-U+036F once the name is decomposed. Shared by every
+ * employee search box so the same query matches the same people everywhere.
+ */
+export function normalizeForSearch(value: string): string {
+  return [...value.normalize("NFD")]
+    .filter((char) => {
+      const code = char.charCodeAt(0);
+      return code < 0x300 || code > 0x36f;
+    })
+    .join("")
+    .toLowerCase();
+}
+
 // ── Timezone handling ─────────────────────────────────
 // The business runs on Philippine time. Servers may run in any timezone
 // (production is UTC), so every date/time conversion is pinned to

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import DataTable, { type Column } from "@/components/DataTable";
-import { formatDate, formatTime } from "@/lib/utils";
+import { formatDate, formatTime, normalizeForSearch } from "@/lib/utils";
 
 interface AttendanceRecord {
   id: string;
@@ -27,19 +27,6 @@ interface AttendanceTableProps {
   userRole: string;
 }
 
-/**
- * Lower-cased and accent-free, so "banaria" still finds "Bañaria". Combining
- * accents live in U+0300-U+036F once the name is decomposed.
- */
-const normalize = (value: string) =>
-  [...value.normalize("NFD")]
-    .filter((char) => {
-      const code = char.charCodeAt(0);
-      return code < 0x300 || code > 0x36f;
-    })
-    .join("")
-    .toLowerCase();
-
 const statusStyles: Record<string, string> = {
   PRESENT: "bg-green-100 text-green-700",
   ABSENT: "bg-red-100 text-red-700",
@@ -60,10 +47,10 @@ export default function AttendanceTable({ records, showEmployeeName, userRole }:
   // Names are matched word by word so "banaria jayson" and "jayson banaria"
   // both find the same person. The employee number is searchable too, so an
   // ID pasted from a payslip works the same way.
-  const searchWords = normalize(employeeQuery).split(/\s+/).filter(Boolean);
+  const searchWords = normalizeForSearch(employeeQuery).split(/\s+/).filter(Boolean);
   const shown = searchWords.length
     ? records.filter((record) => {
-        const haystack = `${normalize(record.employeeName)} ${normalize(record.employeeNumber)}`;
+        const haystack = normalizeForSearch(`${record.employeeName} ${record.employeeNumber}`);
         return searchWords.every((word) => haystack.includes(word));
       })
     : records;
