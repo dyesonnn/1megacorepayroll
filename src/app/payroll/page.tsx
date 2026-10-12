@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import DashboardLayout from "@/components/DashboardLayout";
 import PayrollActions from "./PayrollActions";
 import PayrollPeriodCard from "./PayrollPeriodCard";
+import PayrollSummary, { type DepartmentTotals } from "./PayrollSummary";
 
 export default async function PayrollPage() {
   const session = await getSession();
@@ -25,9 +26,12 @@ export default async function PayrollPage() {
   const periods = await prisma.payrollPeriod.findMany({
     orderBy: { startDate: "desc" },
     include: {
+      department: { select: { name: true } },
+      _count: { select: { scopeEmployees: true } },
       records: {
         include: {
-          employee: true,
+          // department is needed for the per-company totals below
+          employee: { include: { department: { select: { id: true, name: true } } } },
           // Advances deducted through this record (shown in the CA column)
           cashAdvances: { where: { status: "DEDUCTED" }, select: { amount: true } },
         },
@@ -51,6 +55,62 @@ export default async function PayrollPage() {
     where: { employmentStatus: "ACTIVE" },
   });
 
+  // Totals per department/company across every period. Each company is a
+  // department (1MEGACORE, 1MPRL, Pauline's, ...), so this is what each entity
+  // was actually paid. Records are few enough to total in memory.
+  const totalsByDepartment = new Map<string, DepartmentTotals & { employeeIds: Set<string> }>();
+  for (const period of periods) {
+    for (const record of period.records) {
+      const { id: departmentId, name: departmentName } = record.employee.department;
+      const entry = totalsByDepartment.get(departmentId) ?? {
+        departmentId,
+        departmentName,
+        employees: 0,
+        gross: 0,
+        deductions: 0,
+        net: 0,
+        cashAdvances: 0,
+        paidCount: 0,
+        recordCount: 0,
+        employeeIds: new Set<string>(),
+      };
+      entry.employeeIds.add(record.employeeId);
+      entry.gross += record.grossPay;
+      entry.deductions += record.totalDeductions;
+      entry.net += record.netPay;
+      entry.cashAdvances += record.cashAdvances.reduce((sum, a) => sum + a.amount, 0);
+      if (record.paid) entry.paidCount += 1;
+      entry.recordCount += 1;
+      totalsByDepartment.set(departmentId, entry);
+    }
+  }
+  const departmentTotals: DepartmentTotals[] = [...totalsByDepartment.values()]
+    .map(({ employeeIds, ...rest }) => ({ ...rest, employees: employeeIds.size }))
+    .sort((a, b) => b.net - a.net);
+
+  // Scope options for the create-period form: a department payroll needs the
+  // department list, a hand-picked payroll needs the roster to choose from.
+  const isEmployeeRole = session.role === "EMPLOYEE";
+  const departments = isEmployeeRole
+    ? []
+    : await prisma.department.findMany({
+        orderBy: { name: "asc" },
+        include: { _count: { select: { employees: { where: { employmentStatus: "ACTIVE" } } } } },
+      });
+  const roster = isEmployeeRole
+    ? []
+    : await prisma.employee.findMany({
+        where: { employmentStatus: "ACTIVE" },
+        orderBy: { employeeNumber: "asc" },
+        select: {
+          id: true,
+          employeeNumber: true,
+          firstName: true,
+          lastName: true,
+          department: { select: { name: true } },
+        },
+      });
+
   return (
     <DashboardLayout userRole={session.role} userName={userName}>
       <div className="p-6">
@@ -65,7 +125,26 @@ export default async function PayrollPage() {
 
         {/* Payroll Actions (Admin/HR) */}
         {session.role !== "EMPLOYEE" && (
-          <PayrollActions totalActiveEmployees={totalActiveEmployees} />
+          <PayrollActions
+            totalActiveEmployees={totalActiveEmployees}
+            departments={departments.map((d) => ({
+              id: d.id,
+              name: d.name,
+              activeEmployees: d._count.employees,
+            }))}
+            roster={roster.map((e) => ({
+              id: e.id,
+              employeeNumber: e.employeeNumber,
+              firstName: e.firstName,
+              lastName: e.lastName,
+              departmentName: e.department.name,
+            }))}
+          />
+        )}
+
+        {/* Totals per department/company (Admin/HR — employees only see their own) */}
+        {session.role !== "EMPLOYEE" && (
+          <PayrollSummary rows={departmentTotals} periodCount={periods.length} />
         )}
 
         {/* Payroll Periods */}
@@ -84,6 +163,9 @@ export default async function PayrollPage() {
                   payDate: period.payDate.toISOString(),
                   status: period.status,
                   includeOvertimePay: period.includeOvertimePay,
+                  scopeType: period.scopeType,
+                  departmentName: period.department?.name ?? null,
+                  scopeEmployeeCount: period._count.scopeEmployees,
                   records: period.records.map((r) => ({
                     id: r.id,
                     employeeId: r.employeeId,

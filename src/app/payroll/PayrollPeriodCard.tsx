@@ -38,6 +38,10 @@ interface PayrollPeriodCardProps {
     payDate: string;
     status: string;
     includeOvertimePay: boolean;
+    /** ALL = everyone with attendance, DEPARTMENT = one department, SELECTED = hand-picked. */
+    scopeType: string;
+    departmentName: string | null;
+    scopeEmployeeCount: number;
     records: PayrollRecord[];
   };
   showControls: boolean;
@@ -46,6 +50,14 @@ interface PayrollPeriodCardProps {
 
 export default function PayrollPeriodCard({ period, showControls, defaultExpanded = false }: PayrollPeriodCardProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
+
+  // Label the payroll so side-by-side runs for the same dates are tellable apart.
+  const scopeLabel =
+    period.scopeType === "DEPARTMENT"
+      ? `Dept: ${period.departmentName ?? "—"}`
+      : period.scopeType === "SELECTED"
+        ? `Selected: ${period.scopeEmployeeCount} employee${period.scopeEmployeeCount !== 1 ? "s" : ""}`
+        : "All employees";
 
   const totalNetPay = period.records.reduce((sum, r) => sum + r.netPay, 0);
   const paidCount = period.records.filter((r) => r.paid).length;
@@ -67,6 +79,15 @@ export default function PayrollPeriodCard({ period, showControls, defaultExpande
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-base font-semibold text-slate-900">{period.name}</h2>
+              <span
+                className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                  period.scopeType === "ALL"
+                    ? "bg-slate-100 text-slate-600"
+                    : "bg-indigo-100 text-indigo-700"
+                }`}
+              >
+                {scopeLabel}
+              </span>
               {!period.includeOvertimePay && (
                 <span
                   className="px-2 py-0.5 text-xs font-medium rounded-full bg-orange-100 text-orange-700"

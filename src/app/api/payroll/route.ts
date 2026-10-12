@@ -16,6 +16,35 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "All fields are required" }, { status: 400 });
       }
 
+      // A payroll can cover everyone (the original behaviour), one department,
+      // or a hand-picked set of employees. Scoped payrolls are separate periods,
+      // so the all-employees payroll is never disturbed.
+      const scopeType = ["ALL", "DEPARTMENT", "SELECTED"].includes(body.scopeType)
+        ? (body.scopeType as string)
+        : "ALL";
+
+      let departmentId: string | null = null;
+      if (scopeType === "DEPARTMENT") {
+        if (!body.departmentId) {
+          return NextResponse.json({ error: "Choose a department for this payroll" }, { status: 400 });
+        }
+        const department = await prisma.department.findUnique({ where: { id: body.departmentId } });
+        if (!department) {
+          return NextResponse.json({ error: "Department not found" }, { status: 404 });
+        }
+        departmentId = department.id;
+      }
+
+      const employeeIds: string[] = [];
+      if (Array.isArray(body.employeeIds)) {
+        for (const id of body.employeeIds) {
+          if (typeof id === "string" && !employeeIds.includes(id)) employeeIds.push(id);
+        }
+      }
+      if (scopeType === "SELECTED" && employeeIds.length === 0) {
+        return NextResponse.json({ error: "Choose at least one employee for this payroll" }, { status: 400 });
+      }
+
       const period = await prisma.payrollPeriod.create({
         data: {
           name,
@@ -23,6 +52,11 @@ export async function POST(request: NextRequest) {
           endDate: new Date(endDate),
           payDate: new Date(payDate),
           status: "DRAFT",
+          scopeType,
+          departmentId,
+          scopeEmployees: scopeType === "SELECTED"
+            ? { create: employeeIds.map((employeeId) => ({ employeeId })) }
+            : undefined,
         },
       });
 
@@ -35,7 +69,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Period ID is required" }, { status: 400 });
       }
 
-      const period = await prisma.payrollPeriod.findUnique({ where: { id: periodId } });
+      const period = await prisma.payrollPeriod.findUnique({
+        where: { id: periodId },
+        include: { scopeEmployees: { select: { employeeId: true } } },
+      });
       if (!period) {
         return NextResponse.json({ error: "Period not found" }, { status: 404 });
       }
@@ -73,12 +110,35 @@ export async function POST(request: NextRequest) {
         ...new Set(attendance.map((a) => a.employeeId)),
       ];
 
-      // Only fetch employees who have attendance records
-      const employees = await prisma.employee.findMany({
-        where: {
-          id: { in: employeeIdsWithAttendance },
-        },
-      });
+      // Who gets a row in this payroll. The all-employees payroll keeps its
+      // original rule — only people who have attendance — so existing payrolls
+      // don't suddenly grow rows of zeros. A scoped payroll is explicit about
+      // who it covers, so everyone in scope is listed, at ₱0 when they have no
+      // attendance (HR may still need the row to add an adjustment or advance).
+      let employees;
+      if (period.scopeType === "DEPARTMENT" && period.departmentId) {
+        employees = await prisma.employee.findMany({
+          where: {
+            departmentId: period.departmentId,
+            // Everyone still employed, plus anyone who worked part of the
+            // period before leaving — they are owed for those days.
+            OR: [
+              { employmentStatus: "ACTIVE" },
+              { id: { in: employeeIdsWithAttendance } },
+            ],
+          },
+        });
+      } else if (period.scopeType === "SELECTED") {
+        employees = await prisma.employee.findMany({
+          where: { id: { in: period.scopeEmployees.map((s) => s.employeeId) } },
+        });
+      } else {
+        employees = await prisma.employee.findMany({
+          where: {
+            id: { in: employeeIdsWithAttendance },
+          },
+        });
+      }
 
       // Delete existing records for this period
       await prisma.payrollRecord.deleteMany({
