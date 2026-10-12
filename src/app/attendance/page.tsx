@@ -75,8 +75,8 @@ export default async function AttendancePage({
 
   return (
     <DashboardLayout userRole={session.role} userName={userName}>
-      <div className="p-6">
-        <div className="flex items-center justify-between mb-6">
+      <div className="p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">
               {session.role === "EMPLOYEE" ? "My Attendance" : "Attendance & Time Tracking"}
@@ -86,7 +86,7 @@ export default async function AttendancePage({
           {session.role !== "EMPLOYEE" && (
             <a
               href="/attendance/sheet"
-              className="btn-glow px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              className="btn-glow w-full sm:w-auto text-center px-4 py-3 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
             >
               📅 Monthly Sheet
             </a>

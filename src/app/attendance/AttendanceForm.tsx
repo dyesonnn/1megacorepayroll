@@ -147,7 +147,7 @@ export default function AttendanceForm({ employees, sites, holidays }: Attendanc
   };
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+    <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6 mb-6">
       <h2 className="text-lg font-semibold text-slate-900 mb-4">Log Attendance</h2>
 
       {message && (
@@ -166,20 +166,20 @@ export default function AttendanceForm({ employees, sites, holidays }: Attendanc
 
           <form onSubmit={handleStatus} className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <EmployeePicker employees={employees} />
-            <input type="date" name="date" required defaultValue={now.date} className="px-3 py-2 border border-slate-300 rounded-lg text-sm" />
-            <select name="projectSiteId" className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
+            <input type="date" name="date" required defaultValue={now.date} className="px-3 py-3 border border-slate-300 rounded-lg text-sm" />
+            <select name="projectSiteId" className="px-3 py-3 border border-slate-300 rounded-lg text-sm bg-white">
               <option value="">Select Site (optional)</option>
               {sites.map((s) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>
-            <div className="grid grid-cols-2 gap-2">
-              <select name="status" className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <select name="status" className="px-3 py-3 border border-slate-300 rounded-lg text-sm bg-white">
                 <option value="PRESENT">✅ Present</option>
                 <option value="HALF_DAY">🌅 Half Day</option>
                 <option value="ABSENT">❌ Absent</option>
               </select>
-              <select name="holidayType" defaultValue="" className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
+              <select name="holidayType" defaultValue="" className="px-3 py-3 border border-slate-300 rounded-lg text-sm bg-white">
                 <option value="">Day Type: Regular Day</option>
                 <option value="REGULAR">🎉 Day Type: Holiday (double pay)</option>
                 <option value="SPECIAL">🎊 Day Type: Special Holiday (130% pay)</option>
@@ -188,7 +188,7 @@ export default function AttendanceForm({ employees, sites, holidays }: Attendanc
             <button
               type="submit"
               disabled={loading !== null}
-              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 md:col-span-2"
+              className="px-4 py-3 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 md:col-span-2"
             >
               {loading !== null ? "Saving..." : "Mark"}
             </button>
@@ -199,21 +199,21 @@ export default function AttendanceForm({ employees, sites, holidays }: Attendanc
           {/* Time In */}
           <form onSubmit={handleTimeIn} className="space-y-3">
             <h3 className="font-medium text-slate-700 text-sm">Time In (with auto calc)</h3>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <EmployeePicker employees={employees} />
-              <input type="date" name="date" required defaultValue={now.date} className="px-3 py-2 border border-slate-300 rounded-lg text-sm" />
-              <select name="projectSiteId" className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
+              <input type="date" name="date" required defaultValue={now.date} className="px-3 py-3 border border-slate-300 rounded-lg text-sm" />
+              <select name="projectSiteId" className="px-3 py-3 border border-slate-300 rounded-lg text-sm bg-white">
                 <option value="">Select Site</option>
                 {sites.map((s) => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </select>
-              <input type="time" name="timeIn" required defaultValue={now.time} className="px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+              <input type="time" name="timeIn" required defaultValue={now.time} className="px-3 py-3 border border-slate-300 rounded-lg text-sm" />
             </div>
             <button
               type="submit"
               disabled={loading !== null}
-              className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50"
+              className="w-full sm:w-auto px-4 py-3 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50"
             >
               {loading !== null ? "Saving..." : "⏰ Log Time-In"}
             </button>
@@ -222,15 +222,15 @@ export default function AttendanceForm({ employees, sites, holidays }: Attendanc
           {/* Time Out */}
           <form onSubmit={handleTimeOut} className="space-y-3">
             <h3 className="font-medium text-slate-700 text-sm">Time Out (with auto calc)</h3>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <EmployeePicker employees={employees} />
-              <input type="date" name="date" required defaultValue={now.date} className="px-3 py-2 border border-slate-300 rounded-lg text-sm" />
-              <input type="time" name="timeOut" required defaultValue={now.time} className="px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+              <input type="date" name="date" required defaultValue={now.date} className="px-3 py-3 border border-slate-300 rounded-lg text-sm" />
+              <input type="time" name="timeOut" required defaultValue={now.time} className="px-3 py-3 border border-slate-300 rounded-lg text-sm" />
             </div>
             <button
               type="submit"
               disabled={loading !== null}
-              className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50"
+              className="w-full sm:w-auto px-4 py-3 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50"
             >
               {loading !== null ? "Saving..." : "🏁 Log Time-Out"}
             </button>

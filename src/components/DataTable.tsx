@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 export interface Column<T = any> {
   key: string;
   label: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   render?: (item: T) => React.ReactNode;
   sortable?: boolean;
   className?: string;
@@ -20,6 +19,13 @@ interface DataTableProps {
   pageSize?: number;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onRowClick?: (item: any) => void;
+  /**
+   * A wide table has to be dragged sideways on a phone, so callers that can
+   * summarise a row pass this and get one stacked card per record below `md`.
+   * The same sorted and paged rows feed both views; desktop still gets the table.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  mobileCard?: (item: any) => React.ReactNode;
 }
 
 export default function DataTable({
@@ -27,6 +33,7 @@ export default function DataTable({
   data,
   pageSize = 10,
   onRowClick,
+  mobileCard,
 }: DataTableProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortKey, setSortKey] = useState<string | null>(null);
@@ -60,7 +67,26 @@ export default function DataTable({
 
   return (
     <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-      <div className="overflow-x-auto">
+      {/* Phone view: one card per record instead of a sideways-scrolling table */}
+      {mobileCard && (
+        <div className="md:hidden divide-y divide-slate-100">
+          {paginated.length === 0 ? (
+            <p className="px-4 py-8 text-center text-sm text-slate-500">No data available</p>
+          ) : (
+            paginated.map((item, idx) => (
+              <div
+                key={idx}
+                className={cn("px-4 py-3", onRowClick && "cursor-pointer")}
+                onClick={() => onRowClick?.(item)}
+              >
+                {mobileCard(item)}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      <div className={cn("overflow-x-auto", mobileCard && "hidden md:block")}>
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50">
