@@ -27,6 +27,19 @@ interface AttendanceTableProps {
   userRole: string;
 }
 
+/**
+ * Lower-cased and accent-free, so "banaria" still finds "Bañaria". Combining
+ * accents live in U+0300-U+036F once the name is decomposed.
+ */
+const normalize = (value: string) =>
+  [...value.normalize("NFD")]
+    .filter((char) => {
+      const code = char.charCodeAt(0);
+      return code < 0x300 || code > 0x36f;
+    })
+    .join("")
+    .toLowerCase();
+
 const statusStyles: Record<string, string> = {
   PRESENT: "bg-green-100 text-green-700",
   ABSENT: "bg-red-100 text-red-700",
@@ -42,6 +55,18 @@ export default function AttendanceTable({ records, showEmployeeName, userRole }:
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [isError, setIsError] = useState(false);
+  const [employeeQuery, setEmployeeQuery] = useState("");
+
+  // Names are matched word by word so "banaria jayson" and "jayson banaria"
+  // both find the same person. The employee number is searchable too, so an
+  // ID pasted from a payslip works the same way.
+  const searchWords = normalize(employeeQuery).split(/\s+/).filter(Boolean);
+  const shown = searchWords.length
+    ? records.filter((record) => {
+        const haystack = `${normalize(record.employeeName)} ${normalize(record.employeeNumber)}`;
+        return searchWords.every((word) => haystack.includes(word));
+      })
+    : records;
 
   const handleStatusUpdate = async (id: string, newStatus: string) => {
     try {
@@ -215,9 +240,35 @@ export default function AttendanceTable({ records, showEmployeeName, userRole }:
           {message}
         </div>
       )}
+      {showEmployeeName && (
+        <div className="relative mb-4">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">
+            🔍
+          </span>
+          <input
+            type="text"
+            value={employeeQuery}
+            onChange={(e) => setEmployeeQuery(e.target.value)}
+            placeholder="Search by name or employee number…"
+            aria-label="Search attendance by employee"
+            className="w-full pl-9 pr-9 py-2 border border-slate-300 rounded-lg text-sm bg-white sm:w-72 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+          />
+          {employeeQuery && (
+            <button
+              type="button"
+              onClick={() => setEmployeeQuery("")}
+              aria-label="Clear employee search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 px-1 text-sm text-slate-400 hover:text-slate-700"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      )}
+
       <DataTable
         columns={columns}
-        data={records}
+        data={shown}
         pageSize={15}
       />
     </div>
