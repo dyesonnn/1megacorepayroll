@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { PH_TZ } from "@/lib/utils";
+import EmployeePicker from "@/components/EmployeePicker";
 
 interface Employee {
   id: string;
@@ -23,6 +24,7 @@ interface CashAdvance {
     firstName: string;
     lastName: string;
   };
+  payrollRecord?: { id: string; paid: boolean } | null;
 }
 
 interface CashAdvanceManagerProps {
@@ -36,6 +38,8 @@ export default function CashAdvanceManager({ employees, initialAdvances, advance
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [search, setSearch] = useState("");
   const [filterEmployee, setFilterEmployee] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [formEmployeeId, setFormEmployeeId] = useState("");
@@ -62,11 +66,24 @@ export default function CashAdvanceManager({ employees, initialAdvances, advance
     });
   };
 
+  // Deducted in a payroll that is already marked paid — the money is settled,
+  // so the advance has to stay as the record of it.
+  const isDeleteLocked = (advance: CashAdvance) =>
+    advance.status === "DEDUCTED" && advance.payrollRecord?.paid === true;
+
+  const query = search.trim().toLowerCase();
+
   const filteredAdvances = advances.filter((a) => {
     if (filterEmployee && a.employeeId !== filterEmployee) return false;
     if (filterStatus && a.status !== filterStatus) return false;
+    if (query) {
+      const haystack = `${a.employee.firstName} ${a.employee.lastName} ${a.employee.employeeNumber} ${a.description ?? ""}`.toLowerCase();
+      if (!haystack.includes(query)) return false;
+    }
     return true;
   });
+
+  const hasFilters = query !== "" || filterEmployee !== "" || filterStatus !== "";
 
   const totalPending = filteredAdvances
     .filter((a) => a.status === "PENDING")
@@ -92,12 +109,22 @@ export default function CashAdvanceManager({ employees, initialAdvances, advance
 
     const form = new FormData(e.currentTarget);
 
+    // The picker carries the id in a hidden field, which the browser cannot
+    // mark as required — so a half-typed name is caught here rather than
+    // being sent as an empty employee.
+    const employeeId = form.get("employeeId");
+    if (!employeeId) {
+      setError("Choose an employee from the list");
+      setLoading(false);
+      return;
+    }
+
     try {
       const res = await fetch("/api/cash-advances", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          employeeId: form.get("employeeId"),
+          employeeId,
           amount: parseFloat(form.get("amount") as string),
           advanceDate: form.get("advanceDate"),
           description: form.get("description") || null,
@@ -123,8 +150,10 @@ export default function CashAdvanceManager({ employees, initialAdvances, advance
   };
 
   const handleCancel = async (id: string) => {
-    if (!confirm("Are you sure you want to cancel this cash advance?")) return;
+    if (!confirm("Cancel this cash advance? It stays in the list as CANCELLED and is no longer counted."))
+      return;
 
+    setNotice("");
     setLoading(true);
     try {
       const res = await fetch(`/api/cash-advances?id=${id}`, { method: "DELETE" });
@@ -135,6 +164,39 @@ export default function CashAdvanceManager({ employees, initialAdvances, advance
       setAdvances(advances.map((a) => (a.id === id ? { ...a, status: "CANCELLED" } : a)));
     } catch {
       alert("Connection error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (advance: CashAdvance) => {
+    const who = `${advance.employee.firstName} ${advance.employee.lastName}`;
+    const deducted = advance.status === "DEDUCTED";
+    if (
+      !confirm(
+        `Permanently delete this ${formatPeso(advance.amount)} cash advance of ${who}?\n\n` +
+          (deducted
+            ? "It was already deducted in this payroll, so its amount is also removed from that payslip (net pay goes up). " +
+              "This cannot be undone."
+            : "It will be removed from the list, the totals, and the monthly sheet. This cannot be undone.")
+      )
+    )
+      return;
+
+    setNotice("");
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/cash-advances?id=${advance.id}&permanent=true`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setNotice(data.error || "Failed to delete cash advance");
+        return;
+      }
+      setAdvances(advances.filter((a) => a.id !== advance.id));
+    } catch {
+      setNotice("Connection error. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -165,22 +227,42 @@ export default function CashAdvanceManager({ employees, initialAdvances, advance
         </div>
       </div>
 
-      {/* Filters & Add Button */}        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <div className="flex flex-wrap items-center gap-4">
-          <div className="flex-1 min-w-[200px]">
-              <label className="block text-sm text-slate-600 mb-1">Filter by Employee</label>
-            <select
-              value={filterEmployee}
-              onChange={(e) => setFilterEmployee(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-            >
-              <option value="">All Employees</option>
-              {employees.map((emp) => (
-                <option key={emp.id} value={emp.id}>
-                  {emp.employeeNumber} - {emp.firstName} {emp.lastName}
-                </option>
-              ))}
-            </select>
+      {/* Filters & Add Button */}
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="flex-1 min-w-[240px]">
+            <label className="block text-sm text-slate-600 mb-1">Search</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search name, employee no., or description"
+                className="w-full pl-9 pr-9 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              />
+              {search !== "" && (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  aria-label="Clear search"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 px-1 text-slate-400 hover:text-slate-600"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="flex-1 min-w-[240px]">
+            <label className="block text-sm text-slate-600 mb-1">Filter by Employee</label>
+            {/* Type to find the employee instead of scrolling the whole
+                roster — same picker the attendance marking forms use. */}
+            <EmployeePicker
+              employees={employees}
+              name="filterEmployee"
+              placeholder="All employees — type a name or number…"
+              onSelect={(emp) => setFilterEmployee(emp?.id ?? "")}
+            />
           </div>
           <div className="min-w-[150px]">
             <label className="block text-sm text-slate-600 mb-1">Filter by Status</label>
@@ -196,6 +278,19 @@ export default function CashAdvanceManager({ employees, initialAdvances, advance
             </select>
           </div>
           <div className="flex items-end gap-2">
+            {hasFilters && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setFilterEmployee("");
+                  setFilterStatus("");
+                }}
+                className="px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                Clear
+              </button>
+            )}
             <a
               href="/payroll/cash-advances/settings"
               className="px-4 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
@@ -210,6 +305,18 @@ export default function CashAdvanceManager({ employees, initialAdvances, advance
             </button>
           </div>
         </div>
+
+        {notice && (
+          <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3 mt-4">
+            {notice}
+          </div>
+        )}
+
+        {hasFilters && (
+          <p className="text-xs text-slate-500 mt-3">
+            Showing {filteredAdvances.length} of {advances.length} cash advance{advances.length === 1 ? "" : "s"}
+          </p>
+        )}
       </div>
 
       {/* Add Form Modal */}
@@ -227,20 +334,12 @@ export default function CashAdvanceManager({ employees, initialAdvances, advance
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Employee</label>
-                <select
-                  name="employeeId"
-                  required
-                  value={formEmployeeId}
-                  onChange={(e) => setFormEmployeeId(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                >
-                  <option value="">Select Employee</option>
-                  {employees.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.employeeNumber} - {emp.firstName} {emp.lastName}
-                    </option>
-                  ))}
-                </select>
+                {/* Type-to-search, like the attendance marking form — the
+                    chosen id still submits through the employeeId field. */}
+                <EmployeePicker
+                  employees={employees}
+                  onSelect={(emp) => setFormEmployeeId(emp?.id ?? "")}
+                />
                 {formEmployeeId && (
                   <p className={`text-xs mt-1 ${formWouldExceed ? "text-red-600" : "text-slate-400"}`}>
                     Outstanding: {formatPeso(formOutstanding)} · Limit: {formatPeso(advanceLimit)} · Available:{" "}
@@ -320,7 +419,11 @@ export default function CashAdvanceManager({ employees, initialAdvances, advance
         <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
           <div className="text-slate-400 text-4xl mb-4">💰</div>
           <h3 className="text-lg font-medium text-slate-900 mb-2">No cash advances found</h3>
-          <p className="text-slate-500">Add a cash advance to get started</p>
+          <p className="text-slate-500">
+            {hasFilters
+              ? "No cash advances match your search or filters"
+              : "Add a cash advance to get started"}
+          </p>
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -353,15 +456,35 @@ export default function CashAdvanceManager({ employees, initialAdvances, advance
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    {advance.status === "PENDING" && (
+                    <div className="flex items-center gap-2">
+                      {advance.status !== "DEDUCTED" && (
+                        <button
+                          onClick={() => handleCancel(advance.id)}
+                          disabled={loading}
+                          title="Keep the record but stop counting it"
+                          className="px-3 py-1 text-sm border border-slate-300 text-slate-600 rounded-lg hover:bg-slate-50 disabled:opacity-50 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      )}
                       <button
-                        onClick={() => handleCancel(advance.id)}
-                        disabled={loading}
-                        className="px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        onClick={() => handleDelete(advance)}
+                        disabled={loading || isDeleteLocked(advance)}
+                        title={
+                          isDeleteLocked(advance)
+                            ? "Deducted in a payroll already marked paid — it stays as a record of the money recovered"
+                            : advance.status === "DEDUCTED"
+                              ? "Remove this advance and its deduction from the payroll"
+                              : "Remove this cash advance completely"
+                        }
+                        className="px-3 py-1 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
                       >
-                        Cancel
+                        🗑️ Delete
                       </button>
-                    )}
+                      {isDeleteLocked(advance) && (
+                        <span className="text-xs text-slate-400">Paid — locked</span>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

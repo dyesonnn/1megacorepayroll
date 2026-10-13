@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { utcDayStart, dayKey } from "@/lib/utils";
+import { getSettings } from "@/lib/settings";
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -140,12 +141,31 @@ export async function POST(request: NextRequest) {
         });
       }
 
+      // Recomputing refreshes the attendance-based pay, but it must not wipe
+      // what HR already put on this payroll. Snapshot the existing records so
+      // the manual additions/deductions, the paid flag, and the cash advances
+      // already deducted here survive the rebuild below.
+      const existingRecords = await prisma.payrollRecord.findMany({
+        where: { payrollPeriodId: periodId },
+        include: {
+          cashAdvances: {
+            where: { status: "DEDUCTED" },
+            orderBy: { advanceDate: "asc" },
+            select: { id: true, amount: true },
+          },
+        },
+      });
+      const carriedByEmployee = new Map(existingRecords.map((r) => [r.employeeId, r]));
+
       // Delete existing records for this period
       await prisma.payrollRecord.deleteMany({
         where: { payrollPeriodId: periodId },
       });
 
+      const { cashAdvanceMaxNetFraction } = await getSettings();
+
       let count = 0;
+      let releasedAdvanceTotal = 0;
 
       for (const emp of employees) {
         // Calculate attendance-based pay
@@ -200,18 +220,51 @@ export async function POST(request: NextRequest) {
         }
         holidayPay = Math.round(holidayPay * 100) / 100;
 
-        // Allowances
-        const allowances = 0;
+        // Manual entries and the paid flag from the previous computation carry
+        // over — computing payroll must not silently erase them. Nobody wants
+        // recomputing to lose the SSS/tax figures the secretary just typed, or
+        // to un-pay an employee who was already paid.
+        const carried = carriedByEmployee.get(emp.id);
 
-        const grossPay = basicPay + overtimePay + holidayPay + allowances;
+        const allowances = carried?.allowances ?? 0;
+        const bonuses = carried?.bonuses ?? 0;
+        const doublePay = carried?.doublePay ?? 0;
 
-        // Deductions start at 0 — secretary inputs them manually via Adjust
-        const sssDeduction = 0;
-        const philhealthDeduction = 0;
-        const pagibigDeduction = 0;
-        const withholdingTax = 0;
+        const grossPay =
+          basicPay + overtimePay + holidayPay + allowances + bonuses + doublePay;
 
-        const totalDeductions = sssDeduction + philhealthDeduction + pagibigDeduction + withholdingTax;
+        const sssDeduction = carried?.sssDeduction ?? 0;
+        const philhealthDeduction = carried?.philhealthDeduction ?? 0;
+        const pagibigDeduction = carried?.pagibigDeduction ?? 0;
+        const withholdingTax = carried?.withholdingTax ?? 0;
+        const otherDeductions = carried?.otherDeductions ?? 0;
+
+        // Cash advances already deducted through this employee's record stay
+        // deducted: the deduction was a decision HR made, and dropping it here
+        // would hand the employee the advance money twice. Oldest first, and
+        // still capped at a fraction of the (new) gross pay — anything over the
+        // cap goes back to PENDING so a later payroll can take it.
+        let advanceBudget = grossPay * cashAdvanceMaxNetFraction;
+        const keptAdvances: string[] = [];
+        const overCapAdvances: string[] = [];
+        let cashAdvanceDeduction = 0;
+        for (const advance of carried?.cashAdvances ?? []) {
+          if (advance.amount <= advanceBudget) {
+            advanceBudget -= advance.amount;
+            cashAdvanceDeduction += advance.amount;
+            keptAdvances.push(advance.id);
+          } else {
+            overCapAdvances.push(advance.id);
+          }
+        }
+
+        const totalDeductions =
+          sssDeduction +
+          philhealthDeduction +
+          pagibigDeduction +
+          withholdingTax +
+          otherDeductions +
+          cashAdvanceDeduction;
         const netPay = grossPay - totalDeductions;
 
         await prisma.payrollRecord.create({
@@ -222,27 +275,73 @@ export async function POST(request: NextRequest) {
             overtimePay,
             holidayPay,
             allowances,
+            bonuses,
+            doublePay,
             grossPay,
             sssDeduction,
             philhealthDeduction,
             pagibigDeduction,
             withholdingTax,
+            otherDeductions,
             totalDeductions,
             netPay,
             daysWorked,
             totalOvertimeHours,
+            paid: carried?.paid ?? false,
+            cashAdvances: { connect: keptAdvances.map((id) => ({ id })) },
           },
         });
+
+        if (overCapAdvances.length > 0) {
+          releasedAdvanceTotal += (carried?.cashAdvances ?? [])
+            .filter((a) => overCapAdvances.includes(a.id))
+            .reduce((sum, a) => sum + a.amount, 0);
+          await prisma.cashAdvance.updateMany({
+            where: { id: { in: overCapAdvances } },
+            data: { status: "PENDING", payrollRecordId: null },
+          });
+        }
+
         count++;
       }
 
-      // Update period status
-      await prisma.payrollPeriod.update({
-        where: { id: periodId },
-        data: { status: "PROCESSING", includeOvertimePay: includeOvertime },
+      // Employees who dropped out of this payroll (left the department, were
+      // removed from a hand-picked scope, or have no attendance) get no record,
+      // so their advances must not stay stranded as DEDUCTED with no payroll.
+      const computedEmployeeIds = new Set(employees.map((e) => e.id));
+      const orphaningAdvances = existingRecords
+        .filter((r) => !computedEmployeeIds.has(r.employeeId))
+        .flatMap((r) => r.cashAdvances.map((a) => a.id));
+      if (orphaningAdvances.length > 0) {
+        releasedAdvanceTotal += existingRecords
+          .filter((r) => !computedEmployeeIds.has(r.employeeId))
+          .flatMap((r) => r.cashAdvances.map((a) => a.amount))
+          .reduce((sum, amount) => sum + amount, 0);
+        await prisma.cashAdvance.updateMany({
+          where: { id: { in: orphaningAdvances } },
+          data: { status: "PENDING", payrollRecordId: null },
+        });
+      }
+
+      // A period whose rows are all still paid stays PAID; recomputing an
+      // unpaid one puts it back in processing.
+      const paidCount = await prisma.payrollRecord.count({
+        where: { payrollPeriodId: periodId, paid: true },
       });
 
-      return NextResponse.json({ count, message: `Payroll computed for ${count} employees` });
+      await prisma.payrollPeriod.update({
+        where: { id: periodId },
+        data: {
+          status: count > 0 && paidCount === count ? "PAID" : "PROCESSING",
+          includeOvertimePay: includeOvertime,
+        },
+      });
+
+      return NextResponse.json({
+        count,
+        releasedAdvanceTotal,
+        message: `Payroll computed for ${count} employees`,
+      });
     }
 
     if (body.type === "deletePeriod") {

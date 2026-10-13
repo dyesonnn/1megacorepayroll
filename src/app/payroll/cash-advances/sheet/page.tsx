@@ -47,9 +47,12 @@ export default async function CashAdvanceSheetPage({
   });
 
   // Get cash advances for this month
+  // Cancelled advances are excluded: they were voided, so they must not
+  // appear in the sheet or in any of its totals.
   const advances = await prisma.cashAdvance.findMany({
     where: {
       advanceDate: { gte: startOfMonth, lt: endOfMonth },
+      status: { not: "CANCELLED" },
     },
     include: {
       employee: {

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { formatPeso } from "@/lib/utils";
 
 interface ComputePayrollButtonProps {
   periodId: string;
@@ -35,9 +36,14 @@ export default function ComputePayrollButton({ periodId, periodStatus }: Compute
         }
 
         setMessage(
-          includeOvertime
+          (includeOvertime
             ? `Payroll computed for ${data.count} employees!`
-            : `Payroll computed for ${data.count} employees (OT pay excluded).`
+            : `Payroll computed for ${data.count} employees (OT pay excluded).`) +
+            // Advances that no longer fit the deduction cap go back to Pending,
+            // so say so instead of letting them look like they vanished.
+            (data.releasedAdvanceTotal > 0
+              ? ` ${formatPeso(data.releasedAdvanceTotal)} of cash advances went back to Pending (over the deduction cap).`
+              : "")
         );
         setIsError(false);
         router.refresh();

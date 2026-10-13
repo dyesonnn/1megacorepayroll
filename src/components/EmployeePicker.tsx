@@ -16,6 +16,12 @@ interface EmployeePickerProps {
   name?: string;
   placeholder?: string;
   className?: string;
+  /**
+   * Told whenever the picked employee changes, so a caller can react to it
+   * (e.g. show that employee's remaining cash-advance limit). Reports null
+   * when the choice is cleared or typed over.
+   */
+  onSelect?: (employee: PickableEmployee | null) => void;
 }
 
 /** Rows rendered before the list starts scrolling, so a big roster stays usable. */
@@ -33,6 +39,7 @@ export default function EmployeePicker({
   name = "employeeId",
   placeholder = "Search employee by name or number…",
   className,
+  onSelect,
 }: EmployeePickerProps) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<PickableEmployee | null>(null);
@@ -85,6 +92,7 @@ export default function EmployeePicker({
     setQuery(labelFor(employee));
     setOpen(false);
     setActiveIndex(null);
+    onSelect?.(employee);
   };
 
   const clear = () => {
@@ -92,6 +100,7 @@ export default function EmployeePicker({
     setQuery("");
     setActiveIndex(null);
     setOpen(true);
+    onSelect?.(null);
     inputRef.current?.focus();
   };
 
@@ -102,6 +111,7 @@ export default function EmployeePicker({
     setSelected(null);
     setActiveIndex(null);
     setOpen(true);
+    onSelect?.(null);
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {

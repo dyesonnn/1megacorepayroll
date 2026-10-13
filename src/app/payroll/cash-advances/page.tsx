@@ -33,6 +33,11 @@ export default async function CashAdvancesPage() {
       employee: {
         select: { employeeNumber: true, firstName: true, lastName: true },
       },
+      // Lets the manager tell an advance that is merely deducted from one that
+      // belongs to an already-paid payroll (which must stay put).
+      payrollRecord: {
+        select: { id: true, paid: true },
+      },
     },
     orderBy: { advanceDate: "desc" },
   });

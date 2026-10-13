@@ -34,6 +34,7 @@ interface CashAdvance {
   advanceDate: string;
   description: string | null;
   status: string;
+  payrollRecord?: { id: string; paid: boolean } | null;
 }
 
 interface AdjustmentModalProps {
@@ -45,7 +46,7 @@ interface AdjustmentModalProps {
 export default function AdjustmentModal({ record, onClose, onSave }: AdjustmentModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [pendingAdvances, setPendingAdvances] = useState<CashAdvance[]>([]);
+  const [employeeAdvances, setEmployeeAdvances] = useState<CashAdvance[]>([]);
   const [selectedAdvances, setSelectedAdvances] = useState<string[]>([]);
   const [maxNetFraction, setMaxNetFraction] = useState(0.5);
 
@@ -63,13 +64,24 @@ export default function AdjustmentModal({ record, onClose, onSave }: AdjustmentM
   const [withholdingTax, setWithholdingTax] = useState(record.withholdingTax);
   const [otherDeductions, setOtherDeductions] = useState(record.otherDeductions);
 
-  // Fetch pending cash advances for this employee + the system cap setting
+  // Fetch this employee's cash advances (pending + the ones already charged to
+  // this payroll) and the system cap setting
   useEffect(() => {
     if (record.employeeId) {
-      fetch(`/api/cash-advances?employeeId=${record.employeeId}&status=PENDING`)
+      fetch(`/api/cash-advances?employeeId=${record.employeeId}`)
         .then((res) => res.json())
-        .then((data) => setPendingAdvances(Array.isArray(data) ? data : []))
-        .catch(() => setPendingAdvances([]));
+        .then((data) => {
+          const list: CashAdvance[] = Array.isArray(data) ? data : [];
+          setEmployeeAdvances(list);
+          // Advances already deducted through this payroll start checked: they
+          // stay deducted unless HR deliberately unchecks them.
+          setSelectedAdvances(
+            list
+              .filter((a) => a.status === "DEDUCTED" && a.payrollRecord?.id === record.id)
+              .map((a) => a.id)
+          );
+        })
+        .catch(() => setEmployeeAdvances([]));
     }
     fetch("/api/cash-advances/settings")
       .then((res) => (res.ok ? res.json() : null))
@@ -79,7 +91,7 @@ export default function AdjustmentModal({ record, onClose, onSave }: AdjustmentM
         }
       })
       .catch(() => {});
-  }, [record.employeeId]);
+  }, [record.employeeId, record.id]);
 
   const formatPeso = (amount: number) => {
     return new Intl.NumberFormat("en-PH", {
@@ -97,18 +109,28 @@ export default function AdjustmentModal({ record, onClose, onSave }: AdjustmentM
     });
   };
 
+  const pendingAdvances = employeeAdvances.filter((a) => a.status === "PENDING");
+
+  // Advances already charged to this payroll. Unchecking one asks the server to
+  // release it back to Pending, so it can be corrected (or deleted) later.
+  const deductedAdvances = employeeAdvances.filter(
+    (a) => a.status === "DEDUCTED" && a.payrollRecord?.id === record.id
+  );
+  const keptDeductedAdvances = deductedAdvances.filter((a) => selectedAdvances.includes(a.id));
+  const releasedDeductedAdvances = deductedAdvances.filter((a) => !selectedAdvances.includes(a.id));
+  const keptDeductedTotal = keptDeductedAdvances.reduce((sum, a) => sum + a.amount, 0);
+  const releasedDeductedTotal = releasedDeductedAdvances.reduce((sum, a) => sum + a.amount, 0);
+
   const totalSelectedAdvanceAmount = pendingAdvances
     .filter((a) => selectedAdvances.includes(a.id))
     .reduce((sum, a) => sum + a.amount, 0);
 
   // Cash advance deductions may consume at most this fraction of gross pay
-  // (matches the server-side cap — oldest advances are deducted first)
+  // (matches the server-side cap — oldest advances are deducted first).
+  // Advances still kept from an earlier save already hold part of that budget.
   const maxAdvanceBudget = record.grossPay * maxNetFraction;
-  const previouslyDeductedTotal = record.totalDeductions - (
-    record.sssDeduction + record.philhealthDeduction + record.pagibigDeduction +
-    record.withholdingTax + record.otherDeductions
-  );
-  const remainingAdvanceBudget = Math.max(0, maxAdvanceBudget - Math.max(0, previouslyDeductedTotal));
+  const previouslyDeductedTotal = keptDeductedTotal;
+  const remainingAdvanceBudget = Math.max(0, maxAdvanceBudget - previouslyDeductedTotal);
   const overCapAmount = Math.max(0, totalSelectedAdvanceAmount - remainingAdvanceBudget);
 
   const advanceBudgetExceeded = overCapAmount > 0;
@@ -145,11 +167,30 @@ export default function AdjustmentModal({ record, onClose, onSave }: AdjustmentM
     );
   };
 
+  // Advances already deducted keep or lose their slot freely — releasing one
+  // frees budget for the pending ones above.
+  const toggleDeducted = (id: string) => {
+    setSelectedAdvances((prev) =>
+      prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]
+    );
+  };
+
   const handleSave = async () => {
     setLoading(true);
     setError("");
 
     try {
+      // A paid payroll keeps its advances as they are, so those fields are left
+      // out entirely rather than sent empty (which the server refuses).
+      const advanceFields = record.paid
+        ? {}
+        : {
+            selectedAdvanceIds: pendingAdvances
+              .filter((a) => selectedAdvances.includes(a.id))
+              .map((a) => a.id),
+            releasedAdvanceIds: releasedDeductedAdvances.map((a) => a.id),
+          };
+
       // Save adjustments
       const res = await fetch("/api/payroll/adjustments", {
         method: "PATCH",
@@ -165,7 +206,7 @@ export default function AdjustmentModal({ record, onClose, onSave }: AdjustmentM
             pagibigDeduction,
             withholdingTax,
             otherDeductions,
-            selectedAdvanceIds: selectedAdvances,
+            ...advanceFields,
           },
         }),
       });
@@ -185,10 +226,10 @@ export default function AdjustmentModal({ record, onClose, onSave }: AdjustmentM
         employeeId: record.employeeId,
         // Reflect the advances just deducted/released in the CA column until
         // the server refresh lands with the authoritative values.
-        cashAdvance: record.cashAdvance + totalSelectedAdvanceAmount,
+        cashAdvance: keptDeductedTotal + totalSelectedAdvanceAmount,
         pendingCashAdvance: Math.max(
           0,
-          record.pendingCashAdvance - totalSelectedAdvanceAmount
+          record.pendingCashAdvance - totalSelectedAdvanceAmount + releasedDeductedTotal
         ),
       });
       onClose();
@@ -343,7 +384,56 @@ export default function AdjustmentModal({ record, onClose, onSave }: AdjustmentM
 
           {/* Cash Advances (Dated) */}
           <div>
-            <h3 className="text-sm font-medium text-slate-700 mb-3">💰 Cash Advances (Pending)</h3>
+            <h3 className="text-sm font-medium text-slate-700 mb-3">💰 Cash Advances</h3>
+
+            {deductedAdvances.length > 0 && (
+              <div className="space-y-2 mb-4">
+                {deductedAdvances.map((advance) => (
+                  <label
+                    key={advance.id}
+                    className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
+                      record.paid
+                        ? "border-slate-200 bg-slate-50 cursor-default"
+                        : selectedAdvances.includes(advance.id)
+                          ? "border-emerald-500 bg-emerald-50 cursor-pointer"
+                          : "border-slate-300 bg-white cursor-pointer"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        disabled={record.paid}
+                        checked={selectedAdvances.includes(advance.id)}
+                        onChange={() => toggleDeducted(advance.id)}
+                        className="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500"
+                      />
+                      <div>
+                        <p className="text-sm font-medium text-slate-900">
+                          {formatPeso(advance.amount)}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          📅 {formatDate(advance.advanceDate)}
+                          {advance.description && ` • ${advance.description}`}
+                        </p>
+                      </div>
+                    </div>
+                    {selectedAdvances.includes(advance.id) ? (
+                      <span className="text-xs font-medium text-emerald-700">✓ Already deducted</span>
+                    ) : (
+                      <span className="text-xs font-medium text-amber-700">↩︎ Back to Pending</span>
+                    )}
+                  </label>
+                ))}
+                {record.paid && (
+                  <p className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg p-3">
+                    This payroll is already marked paid, so these advances stay as the record of the
+                    money recovered. Delete the payroll period if they really have to be released.
+                  </p>
+                )}
+              </div>
+            )}
+
+            <h4 className="text-xs font-medium text-slate-500 mb-2">Pending advances</h4>
             {pendingAdvances.length === 0 ? (
               <p className="text-sm text-slate-500 bg-slate-50 rounded-lg p-3">No pending cash advances for this employee.</p>
             ) : (
@@ -379,7 +469,10 @@ export default function AdjustmentModal({ record, onClose, onSave }: AdjustmentM
                     )}
                   </label>
                 ))}
-                {(totalSelectedAdvanceAmount > 0 || advanceBudgetExceeded) && (
+                {(totalSelectedAdvanceAmount > 0 ||
+                  keptDeductedTotal > 0 ||
+                  releasedDeductedTotal > 0 ||
+                  advanceBudgetExceeded) && (
                   <div
                     className={`rounded-lg p-3 text-sm ${
                       advanceBudgetExceeded
@@ -392,8 +485,14 @@ export default function AdjustmentModal({ record, onClose, onSave }: AdjustmentM
                         advanceBudgetExceeded ? "text-red-700" : "text-yellow-700"
                       }`}
                     >
-                      Total Cash Advances to Deduct: {formatPeso(totalSelectedAdvanceAmount)}
+                      Total Cash Advances to Deduct:{" "}
+                      {formatPeso(keptDeductedTotal + totalSelectedAdvanceAmount)}
                     </span>
+                    {releasedDeductedTotal > 0 && (
+                      <p className="text-xs mt-1 text-amber-700">
+                        {formatPeso(releasedDeductedTotal)} goes back to Pending when you save.
+                      </p>
+                    )}
                     <p className={`text-xs mt-1 ${advanceBudgetExceeded ? "text-red-600" : "text-yellow-600"}`}>
                       Cap for this payroll: {formatPeso(remainingAdvanceBudget)} remaining (max
                       {" "}{Math.round(maxNetFraction * 100)}% of gross pay). Oldest advances deduct first.

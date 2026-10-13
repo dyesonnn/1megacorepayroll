@@ -72,6 +72,44 @@ export async function PATCH(request: NextRequest) {
     // anything beyond the cap stays PENDING for a future payroll.
     const { cashAdvanceMaxNetFraction } = await getSettings();
 
+    // Advances that were deducted earlier can be unchecked in the Adjust
+    // window (e.g. the same advance was entered twice by mistake). Those come
+    // in as a release request and go back to PENDING first, so they also give
+    // up their budget slot before the cap is worked out below.
+    const releasedAdvanceIds: string[] = Array.isArray(adjustments.releasedAdvanceIds)
+      ? adjustments.releasedAdvanceIds
+      : [];
+    const selectedAdvanceIds: string[] = Array.isArray(adjustments.selectedAdvanceIds)
+      ? adjustments.selectedAdvanceIds
+      : [];
+
+    // A payroll already marked paid is settled money: its cash advance
+    // deductions must not change underneath the payslip that was handed out.
+    if (
+      currentRecord.paid &&
+      (releasedAdvanceIds.length > 0 || selectedAdvanceIds.length > 0)
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "This payroll is already marked paid, so its cash advance deductions can no longer be changed.",
+        },
+        { status: 400 }
+      );
+    }
+
+    for (const advanceId of releasedAdvanceIds) {
+      const advance = await prisma.cashAdvance.findUnique({ where: { id: advanceId } });
+      // Only advances charged to this very record can be released from here.
+      if (!advance || advance.status !== "DEDUCTED" || advance.payrollRecordId !== recordId) {
+        continue;
+      }
+      await prisma.cashAdvance.update({
+        where: { id: advanceId },
+        data: { status: "PENDING", payrollRecordId: null },
+      });
+    }
+
     // Cap budget: total advance deduction allowed for this record.
     // Based on the record's existing gross (basic/OT/holiday) — additions
     // chosen in the same save (allowances/bonuses/doublePay) don't extend it.
@@ -85,11 +123,11 @@ export async function PATCH(request: NextRequest) {
     const previouslyDeductedTotal = previouslyDeducted.reduce((sum, a) => sum + a.amount, 0);
     let remainingBudget = advanceBudget - previouslyDeductedTotal;
 
-    if (adjustments.selectedAdvanceIds && Array.isArray(adjustments.selectedAdvanceIds)) {
+    if (selectedAdvanceIds.length > 0) {
       // Resolve advances in parallel, then deduct oldest-first within budget
       const requested = (
         await Promise.all(
-          adjustments.selectedAdvanceIds.map((advanceId: string) =>
+          selectedAdvanceIds.map((advanceId: string) =>
             prisma.cashAdvance.findUnique({ where: { id: advanceId } })
           )
         )
@@ -109,18 +147,9 @@ export async function PATCH(request: NextRequest) {
         }
       }
 
-      // Un-link any previously deducted advances the user unchecked this save
-      const keepDeducted = new Set([
-        ...previouslyDeducted.map((a) => a.id),
-        ...toDeduct,
-      ]);
-      const toRelease = previouslyDeducted.filter((a) => !keepDeducted.has(a.id));
-      for (const advance of toRelease) {
-        await prisma.cashAdvance.update({
-          where: { id: advance.id },
-          data: { status: "PENDING", payrollRecordId: null },
-        });
-      }
+      // Advances the user unchecked are already released above (releasedAdvanceIds),
+      // and anything they kept is still DEDUCTED — so only the newly picked
+      // advances have to be charged to this record.
 
       for (const advanceId of toDeduct) {
         await prisma.cashAdvance.update({

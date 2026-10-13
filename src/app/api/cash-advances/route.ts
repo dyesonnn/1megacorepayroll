@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
           select: { employeeNumber: true, firstName: true, lastName: true },
         },
         payrollRecord: {
-          select: { payrollPeriodId: true },
+          select: { id: true, payrollPeriodId: true, paid: true },
         },
       },
       orderBy: { advanceDate: "desc" },
@@ -120,15 +120,64 @@ export async function PATCH(request: NextRequest) {
   }
 }
 
-// DELETE: Cancel a cash advance
+// DELETE: Cancel a cash advance, or permanently remove it (?permanent=true)
 export async function DELETE(request: NextRequest) {
   try {
     await requireAuth(["ADMIN", "HR"]);
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
+    const permanent = searchParams.get("permanent") === "true";
 
     if (!id) {
       return NextResponse.json({ error: "ID is required" }, { status: 400 });
+    }
+
+    if (permanent) {
+      const advance = await prisma.cashAdvance.findUnique({
+        where: { id },
+        include: { payrollRecord: { select: { id: true, paid: true } } },
+      });
+      if (!advance) {
+        return NextResponse.json({ error: "Cash advance not found" }, { status: 404 });
+      }
+
+      // An advance deducted in a payroll that is already marked paid is settled
+      // money, so it stays as a record of what was recovered. (Deleting that
+      // payroll period releases the advance back to Pending if it really must
+      // go.)
+      if (advance.status === "DEDUCTED" && advance.payrollRecord?.paid) {
+        return NextResponse.json(
+          {
+            error:
+              "This advance was already deducted in a payroll marked as paid, so it can no longer be removed. Delete that payroll period first if it really has to go.",
+          },
+          { status: 400 }
+        );
+      }
+
+      await prisma.$transaction(async (tx) => {
+        // A deducted advance is part of a payroll's figures: deleting it takes
+        // its amount out of that payroll too, otherwise net pay would stay
+        // short by an advance that no longer exists.
+        if (advance.payrollRecordId) {
+          const record = await tx.payrollRecord.findUnique({
+            where: { id: advance.payrollRecordId },
+          });
+          if (record) {
+            await tx.payrollRecord.update({
+              where: { id: record.id },
+              data: {
+                totalDeductions: record.totalDeductions - advance.amount,
+                netPay: record.netPay + advance.amount,
+              },
+            });
+          }
+        }
+
+        await tx.cashAdvance.delete({ where: { id } });
+      });
+
+      return NextResponse.json({ success: true, deleted: true });
     }
 
     await prisma.cashAdvance.update({
