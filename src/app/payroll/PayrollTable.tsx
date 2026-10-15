@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { formatPeso } from "@/lib/utils";
 import DataTable, { type Column } from "@/components/DataTable";
 import AdjustmentModal from "./AdjustmentModal";
+import PayrollPrintSheet from "./PayrollPrintSheet";
 
 interface PayrollRecord {
   id: string;
@@ -35,20 +36,43 @@ interface PayrollTableProps {
   records: PayrollRecord[];
   showEmployeeName: boolean;
   periodId: string;
+  periodName: string;
+  payDate: string;
+  scopeLabel: string;
   periodStatus: string;
   otExcluded?: boolean;
 }
 
-export default function PayrollTable({ records, showEmployeeName, periodId, periodStatus, otExcluded = false }: PayrollTableProps) {
+export default function PayrollTable({
+  records,
+  showEmployeeName,
+  periodId,
+  periodName,
+  payDate,
+  scopeLabel,
+  periodStatus,
+  otExcluded = false,
+}: PayrollTableProps) {
   const router = useRouter();
   const [adjustingRecord, setAdjustingRecord] = useState<PayrollRecord | null>(null);
   const [localRecords, setLocalRecords] = useState(records);
   const [payingRecordId, setPayingRecordId] = useState<string | null>(null);
+  const [printing, setPrinting] = useState(false);
 
   // Sync local records when server-side records change (e.g. after Compute Payroll)
   useEffect(() => {
     setLocalRecords(records);
   }, [records]);
+
+  // The sheet has to be in the DOM before the dialog opens, so the print is
+  // triggered from an effect rather than from the click handler.
+  useEffect(() => {
+    if (!printing) return;
+    const handleAfterPrint = () => setPrinting(false);
+    window.addEventListener("afterprint", handleAfterPrint);
+    window.print();
+    return () => window.removeEventListener("afterprint", handleAfterPrint);
+  }, [printing]);
 
   const handleAdjust = (record: PayrollRecord) => {
     setAdjustingRecord(record);
@@ -294,6 +318,16 @@ export default function PayrollTable({ records, showEmployeeName, periodId, peri
 
   return (
     <div>
+      <div className="no-print mb-3 flex justify-end">
+        <button
+          onClick={() => setPrinting(true)}
+          className="px-3 py-1.5 text-sm text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+          title={`Print the whole computation — all ${localRecords.length} employees, not just this page`}
+        >
+          🖨️ Print Computation
+        </button>
+      </div>
+
       <DataTable
         columns={columns}
         data={localRecords as unknown as Record<string, unknown>[]}
@@ -359,6 +393,20 @@ export default function PayrollTable({ records, showEmployeeName, periodId, peri
           record={adjustingRecord}
           onClose={() => setAdjustingRecord(null)}
           onSave={handleSaveAdjustment}
+        />
+      )}
+
+      {/* Full computation on paper — every employee, not just this page */}
+      {printing && (
+        <PayrollPrintSheet
+          periodName={periodName}
+          payDate={payDate}
+          scopeLabel={scopeLabel}
+          status={periodStatus}
+          includeOvertimePay={!otExcluded}
+          showEmployeeName={showEmployeeName}
+          showStatus={periodStatus !== "PAID"}
+          records={localRecords}
         />
       )}
     </div>

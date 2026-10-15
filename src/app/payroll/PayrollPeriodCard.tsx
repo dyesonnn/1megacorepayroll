@@ -149,6 +149,9 @@ export default function PayrollPeriodCard({ period, showControls, defaultExpande
             records={period.records}
             showEmployeeName={showControls}
             periodId={period.id}
+            periodName={period.name}
+            payDate={period.payDate}
+            scopeLabel={scopeLabel}
             periodStatus={period.status}
             otExcluded={!period.includeOvertimePay}
           />
