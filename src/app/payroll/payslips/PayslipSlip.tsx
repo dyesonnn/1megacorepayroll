@@ -48,7 +48,7 @@ function Row({
   value: string;
 }) {
   return (
-    <div className="flex items-baseline py-[1px]">
+    <div className="flex items-baseline py-[2px]">
       <span className="min-w-0 truncate">
         {label}
         {note ? <em> ({note})</em> : null}
@@ -75,44 +75,44 @@ export default function PayslipSlip({
       style={{ fontFamily: "Arial, Helvetica, sans-serif" }}
     >
       {/* Header: logo + title + period */}
-      <div className="flex items-center gap-3 px-3 pt-2 pb-1">
-        <PayslipLogo />
-        <h1 className="text-lg font-bold tracking-wide">PAYSLIP</h1>
-        <span className="ml-auto text-[10px] italic">{periodName}</span>
+      <div className="flex items-center gap-4 px-5 pt-4 pb-2">
+        <PayslipLogo className="w-40 h-12" />
+        <h1 className="text-3xl font-bold tracking-wide">PAYSLIP</h1>
+        <span className="ml-auto text-sm italic">{periodName}</span>
       </div>
 
       {/* Employee info */}
-      <div className="flex px-3 pb-1 text-[10px]">
-        <div className="flex-1 space-y-0.5">
+      <div className="flex px-5 pb-2 text-[13px]">
+        <div className="flex-1 space-y-1">
           <div className="flex">
-            <span className="italic w-32 flex-none">EMPLOYEE NAME:</span>
+            <span className="italic w-40 flex-none">EMPLOYEE NAME:</span>
             <span className="font-bold">{slip.employeeName}</span>
           </div>
           <div className="flex">
-            <span className="italic w-32 flex-none">POSITION:</span>
+            <span className="italic w-40 flex-none">POSITION:</span>
             <span className="font-bold">{slip.position}</span>
           </div>
         </div>
         <div className="w-[42%]">
           <div className="flex">
-            <span className="italic w-28 flex-none">PERIOD COVERED:</span>
+            <span className="italic w-36 flex-none">PERIOD COVERED:</span>
             <span className="font-bold">{periodCovered}</span>
           </div>
         </div>
       </div>
 
       {/* Earnings / Deductions */}
-      <div className="flex flex-1 border-t border-b border-black text-[10px]">
+      <div className="flex flex-1 border-t border-b border-black text-[13px]">
         {/* EARNINGS */}
         <div className="w-1/2 border-r border-black flex flex-col">
-          <div className="bg-gray-300 text-center font-bold py-0.5 text-[11px]">
+          <div className="bg-gray-300 text-center font-bold py-1 text-[15px]">
             EARNINGS
           </div>
-          <div className="flex-1 flex flex-col px-3 py-1 leading-none">
+          <div className="flex-1 flex flex-col px-5 py-2 leading-none">
             <Row label="Basic Rate:" value={peso(slip.dailyRate)} />
             <Row label="Days Worked:" value={String(slip.daysWorked)} />
             <Row label="Basic Pay:" value={peso(slip.basicPay)} />
-            <div className="h-1" />
+            <div className="h-2" />
             <Row label="OT Hours:" value={slip.totalOvertimeHours.toFixed(2)} />
             <Row
               label="OT Pay:"
@@ -129,12 +129,12 @@ export default function PayslipSlip({
             {slip.doublePay > 0 && (
               <Row label="Double Pay:" value={peso(slip.doublePay)} />
             )}
-            <div className="h-1" />
+            <div className="h-2" />
             <Row label="Absent" note="Less" value={peso(slip.absentDeduction)} />
             <Row label="Late" note="Less" value={peso(slip.lateDeduction)} />
             <div className="mt-auto flex items-baseline pt-1">
-              <span className="font-bold italic text-[11px]">GROSS PAY:</span>
-              <span className="ml-auto font-bold text-[11px]">
+              <span className="font-bold italic text-[16px]">GROSS PAY:</span>
+              <span className="ml-auto font-bold text-[16px]">
                 {peso(slip.grossPay)}
               </span>
             </div>
@@ -143,10 +143,10 @@ export default function PayslipSlip({
 
         {/* DEDUCTIONS */}
         <div className="w-1/2 flex flex-col">
-          <div className="bg-gray-300 text-center font-bold py-0.5 text-[11px]">
+          <div className="bg-gray-300 text-center font-bold py-1 text-[15px]">
             DEDUCTIONS
           </div>
-          <div className="flex-1 flex flex-col px-3 py-1 leading-none">
+          <div className="flex-1 flex flex-col px-5 py-2 leading-none">
             <Row label="SSS:" value={peso(slip.sssDeduction)} />
             <Row label="Philhealth:" value={peso(slip.philhealthDeduction)} />
             <Row label="HDMF" value={peso(slip.pagibigDeduction)} />
@@ -155,10 +155,10 @@ export default function PayslipSlip({
             <Row label="Other Deduction:" value={peso(slip.otherDeductions)} />
             <Row label="CA" value={peso(slip.caTotal)} />
             <div className="mt-auto flex items-baseline pt-1">
-              <span className="font-bold italic text-[11px]">
+              <span className="font-bold italic text-[16px]">
                 TOTAL DEDUCTION:
               </span>
-              <span className="ml-auto font-bold text-[11px]">
+              <span className="ml-auto font-bold text-[16px]">
                 {peso(slip.totalDeductions)}
               </span>
             </div>
@@ -167,11 +167,11 @@ export default function PayslipSlip({
       </div>
 
       {/* NET PAY band */}
-      <div className="flex bg-gray-300 text-[11px]">
-        <div className="w-1/2 border-r border-black py-1 text-center italic font-bold">
+      <div className="flex bg-gray-300 text-[16px]">
+        <div className="w-1/2 border-r border-black py-2 text-center italic font-bold">
           NET PAY
         </div>
-        <div className="w-1/2 py-1 text-center font-bold">
+        <div className="w-1/2 py-2 text-center font-bold">
           {peso(slip.netPay)}
         </div>
       </div>

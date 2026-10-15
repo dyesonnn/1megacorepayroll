@@ -18,7 +18,7 @@ export interface PeriodData {
   slips: SlipData[];
 }
 
-const SLIPS_PER_PAGE = 3;
+const SLIPS_PER_PAGE = 2;
 
 function chunk<T>(items: T[], size: number): T[][] {
   const out: T[][] = [];
@@ -84,7 +84,7 @@ export default function PayslipPrinter({
       {/* Print/layout styles — global so they apply to the rendered pages */}
       <style jsx global>{`
         .payslip-slip {
-          height: 3.2in;
+          height: 4.9in;
         }
         .payslip-page {
           width: 8.5in;
@@ -94,7 +94,7 @@ export default function PayslipPrinter({
           box-shadow: 0 1px 6px rgba(0, 0, 0, 0.15);
           display: flex;
           flex-direction: column;
-          gap: 0.1in;
+          gap: 0.2in;
           margin: 0 auto 1rem;
           box-sizing: border-box;
         }
