@@ -30,10 +30,9 @@ interface CashAdvance {
 interface CashAdvanceManagerProps {
   employees: Employee[];
   initialAdvances: CashAdvance[];
-  advanceLimit: number;
 }
 
-export default function CashAdvanceManager({ employees, initialAdvances, advanceLimit }: CashAdvanceManagerProps) {
+export default function CashAdvanceManager({ employees, initialAdvances }: CashAdvanceManagerProps) {
   const [advances, setAdvances] = useState(initialAdvances);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -98,9 +97,6 @@ export default function CashAdvanceManager({ employees, initialAdvances, advance
     .reduce((sum, a) => sum + a.amount, 0);
 
   const formOutstanding = formEmployeeId ? outstandingFor(formEmployeeId) : 0;
-  const formAvailable = Math.max(0, advanceLimit - formOutstanding);
-  const formAmountNum = parseFloat(formAmount) || 0;
-  const formWouldExceed = formEmployeeId !== "" && formAmountNum > 0 && formAmountNum > formAvailable;
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -223,7 +219,7 @@ export default function CashAdvanceManager({ employees, initialAdvances, advance
         <div className="bg-white rounded-xl border border-slate-200 p-4">
           <p className="text-sm text-slate-500">Total Outstanding</p>
           <p className="text-2xl font-bold text-orange-500">{formatPeso(totalOutstanding)}</p>
-          <p className="text-xs text-slate-400 mt-1">Pending recovery via payroll · limit {formatPeso(advanceLimit)}/employee</p>
+          <p className="text-xs text-slate-400 mt-1">Pending recovery via payroll</p>
         </div>
       </div>
 
@@ -291,12 +287,6 @@ export default function CashAdvanceManager({ employees, initialAdvances, advance
                 Clear
               </button>
             )}
-            <a
-              href="/payroll/cash-advances/settings"
-              className="px-4 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
-            >
-              ⚙️ Settings
-            </a>
             <button
               onClick={() => setShowForm(true)}
               className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
@@ -341,9 +331,8 @@ export default function CashAdvanceManager({ employees, initialAdvances, advance
                   onSelect={(emp) => setFormEmployeeId(emp?.id ?? "")}
                 />
                 {formEmployeeId && (
-                  <p className={`text-xs mt-1 ${formWouldExceed ? "text-red-600" : "text-slate-400"}`}>
-                    Outstanding: {formatPeso(formOutstanding)} · Limit: {formatPeso(advanceLimit)} · Available:{" "}
-                    <span className={formWouldExceed ? "font-semibold" : ""}>{formatPeso(formAvailable)}</span>
+                  <p className="text-xs mt-1 text-slate-400">
+                    Outstanding: {formatPeso(formOutstanding)}
                   </p>
                 )}
               </div>
@@ -359,17 +348,8 @@ export default function CashAdvanceManager({ employees, initialAdvances, advance
                   placeholder="0.00"
                   value={formAmount}
                   onChange={(e) => setFormAmount(e.target.value)}
-                  className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 ${
-                    formWouldExceed
-                      ? "border-red-400 focus:ring-red-500 focus:border-red-500"
-                      : "border-slate-300 focus:ring-blue-500 focus:border-blue-500"
-                  }`}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 />
-                {formWouldExceed && (
-                  <p className="text-xs text-red-600 mt-1">
-                    Exceeds the ₱{advanceLimit.toLocaleString("en-PH")} limit — this advance will be rejected.
-                  </p>
-                )}
               </div>
 
               <div>
@@ -403,7 +383,7 @@ export default function CashAdvanceManager({ employees, initialAdvances, advance
                 </button>
                 <button
                   type="submit"
-                  disabled={loading || formWouldExceed}
+                  disabled={loading}
                   className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
                 >
                   {loading ? "Adding..." : "Add Cash Advance"}

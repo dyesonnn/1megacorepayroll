@@ -148,11 +148,14 @@ model EmployeeSkill {
 
 // ─── Settings ─────────────────────────────────────────
 
-// Single-row key/value store for system-wide settings (id is always "default")
+// Single-row key/value store for system-wide settings (id is always "default").
+// The two cash advance columns are no longer read by the app — the per-employee
+// outstanding cap and the payroll deduction cap were removed. They are kept so
+// an existing database does not need a destructive `db push` to drop them.
 model Settings {
   id                        String @id @default("default")
-  cashAdvanceLimit          Float  @default(10000) // max outstanding PENDING cash advance per employee
-  cashAdvanceMaxNetFraction Float  @default(0.5)  // max fraction of net pay that cash advance deductions may consume
+  cashAdvanceLimit          Float  @default(10000) // unused: max outstanding PENDING cash advance per employee
+  cashAdvanceMaxNetFraction Float  @default(0.5)  // unused: max fraction of net pay that cash advance deductions may consume
 
   @@map("settings")
 }

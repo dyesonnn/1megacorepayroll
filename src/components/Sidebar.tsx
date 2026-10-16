@@ -20,7 +20,6 @@ const menuItems = {
     { href: "/attendance", label: "Attendance", icon: "📅" },
     { href: "/payroll", label: "Payroll", icon: "💰" },
     { href: "/payroll/cash-advances", label: "Cash Advances", icon: "💵" },
-    { href: "/payroll/cash-advances/settings", label: "CA Settings", icon: "⚙️" },
     { href: "/reports", label: "Reports", icon: "📈" },
     { href: "/admin/users", label: "User Accounts", icon: "🔑" },
     { href: "/change-password", label: "Change Password", icon: "🔒" },

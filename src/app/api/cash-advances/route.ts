@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
-import { getSettings, getOutstandingAdvance, formatAdvanceLimitError } from "@/lib/settings";
 
 // GET: Fetch cash advances
 export async function GET(request: NextRequest) {
@@ -55,16 +54,6 @@ export async function POST(request: NextRequest) {
     const requestedAmount = parseFloat(amount);
     if (isNaN(requestedAmount) || requestedAmount <= 0) {
       return NextResponse.json({ error: "Amount must be a positive number" }, { status: 400 });
-    }
-
-    // Enforce the system-wide cash advance limit on outstanding balance
-    const { cashAdvanceLimit } = await getSettings();
-    const outstanding = await getOutstandingAdvance(employeeId);
-    if (outstanding + requestedAmount > cashAdvanceLimit) {
-      return NextResponse.json(
-        { error: formatAdvanceLimitError(requestedAmount, outstanding, cashAdvanceLimit) },
-        { status: 400 }
-      );
     }
 
     const advance = await prisma.cashAdvance.create({

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { utcDayStart, dayKey } from "@/lib/utils";
-import { getSettings } from "@/lib/settings";
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -162,8 +161,6 @@ export async function POST(request: NextRequest) {
         where: { payrollPeriodId: periodId },
       });
 
-      const { cashAdvanceMaxNetFraction } = await getSettings();
-
       let count = 0;
       let releasedAdvanceTotal = 0;
 
@@ -241,22 +238,12 @@ export async function POST(request: NextRequest) {
 
         // Cash advances already deducted through this employee's record stay
         // deducted: the deduction was a decision HR made, and dropping it here
-        // would hand the employee the advance money twice. Oldest first, and
-        // still capped at a fraction of the (new) gross pay — anything over the
-        // cap goes back to PENDING so a later payroll can take it.
-        let advanceBudget = grossPay * cashAdvanceMaxNetFraction;
-        const keptAdvances: string[] = [];
-        const overCapAdvances: string[] = [];
-        let cashAdvanceDeduction = 0;
-        for (const advance of carried?.cashAdvances ?? []) {
-          if (advance.amount <= advanceBudget) {
-            advanceBudget -= advance.amount;
-            cashAdvanceDeduction += advance.amount;
-            keptAdvances.push(advance.id);
-          } else {
-            overCapAdvances.push(advance.id);
-          }
-        }
+        // would hand the employee the advance money twice.
+        const keptAdvances = (carried?.cashAdvances ?? []).map((a) => a.id);
+        const cashAdvanceDeduction = (carried?.cashAdvances ?? []).reduce(
+          (sum, a) => sum + a.amount,
+          0
+        );
 
         const totalDeductions =
           sssDeduction +
@@ -292,15 +279,6 @@ export async function POST(request: NextRequest) {
           },
         });
 
-        if (overCapAdvances.length > 0) {
-          releasedAdvanceTotal += (carried?.cashAdvances ?? [])
-            .filter((a) => overCapAdvances.includes(a.id))
-            .reduce((sum, a) => sum + a.amount, 0);
-          await prisma.cashAdvance.updateMany({
-            where: { id: { in: overCapAdvances } },
-            data: { status: "PENDING", payrollRecordId: null },
-          });
-        }
 
         count++;
       }

@@ -3,7 +3,6 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import DashboardLayout from "@/components/DashboardLayout";
 import CashAdvanceManager from "./CashAdvanceManager";
-import { getSettings } from "@/lib/settings";
 
 export default async function CashAdvancesPage() {
   const session = await getSession();
@@ -42,8 +41,6 @@ export default async function CashAdvancesPage() {
     orderBy: { advanceDate: "desc" },
   });
 
-  const settings = await getSettings();
-
   const serializedAdvances = advances.map((a) => ({
     ...a,
     advanceDate: a.advanceDate.toISOString(),
@@ -66,11 +63,7 @@ export default async function CashAdvancesPage() {
             📅 Monthly Sheet
           </a>
         </div>
-        <CashAdvanceManager
-          employees={employees}
-          initialAdvances={serializedAdvances}
-          advanceLimit={settings.cashAdvanceLimit}
-        />
+        <CashAdvanceManager employees={employees} initialAdvances={serializedAdvances} />
       </div>
     </DashboardLayout>
   );

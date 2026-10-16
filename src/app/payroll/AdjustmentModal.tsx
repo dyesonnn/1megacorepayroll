@@ -48,7 +48,6 @@ export default function AdjustmentModal({ record, onClose, onSave }: AdjustmentM
   const [error, setError] = useState("");
   const [employeeAdvances, setEmployeeAdvances] = useState<CashAdvance[]>([]);
   const [selectedAdvances, setSelectedAdvances] = useState<string[]>([]);
-  const [maxNetFraction, setMaxNetFraction] = useState(0.5);
 
   // Additions
   const [allowances, setAllowances] = useState(record.allowances);
@@ -65,7 +64,7 @@ export default function AdjustmentModal({ record, onClose, onSave }: AdjustmentM
   const [otherDeductions, setOtherDeductions] = useState(record.otherDeductions);
 
   // Fetch this employee's cash advances (pending + the ones already charged to
-  // this payroll) and the system cap setting
+  // this payroll)
   useEffect(() => {
     if (record.employeeId) {
       fetch(`/api/cash-advances?employeeId=${record.employeeId}`)
@@ -83,14 +82,6 @@ export default function AdjustmentModal({ record, onClose, onSave }: AdjustmentM
         })
         .catch(() => setEmployeeAdvances([]));
     }
-    fetch("/api/cash-advances/settings")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data && typeof data.cashAdvanceMaxNetFraction === "number") {
-          setMaxNetFraction(data.cashAdvanceMaxNetFraction);
-        }
-      })
-      .catch(() => {});
   }, [record.employeeId, record.id]);
 
   const formatPeso = (amount: number) => {
@@ -125,36 +116,10 @@ export default function AdjustmentModal({ record, onClose, onSave }: AdjustmentM
     .filter((a) => selectedAdvances.includes(a.id))
     .reduce((sum, a) => sum + a.amount, 0);
 
-  // Cash advance deductions may consume at most this fraction of gross pay
-  // (matches the server-side cap — oldest advances are deducted first).
-  // Advances still kept from an earlier save already hold part of that budget.
-  const maxAdvanceBudget = record.grossPay * maxNetFraction;
-  const previouslyDeductedTotal = keptDeductedTotal;
-  const remainingAdvanceBudget = Math.max(0, maxAdvanceBudget - previouslyDeductedTotal);
-  const overCapAmount = Math.max(0, totalSelectedAdvanceAmount - remainingAdvanceBudget);
-
-  const advanceBudgetExceeded = overCapAmount > 0;
-
-  const selectWithinBudget = (ids: string[]) => {
-    // Oldest first — matches server-side order
-    const ordered = pendingAdvances
-      .filter((a) => ids.includes(a.id))
-      .sort((a, b) => new Date(a.advanceDate).getTime() - new Date(b.advanceDate).getTime());
-    let budget = remainingAdvanceBudget;
-    const kept: string[] = [];
-    for (const a of ordered) {
-      if (a.amount <= budget) {
-        budget -= a.amount;
-        kept.push(a.id);
-      }
-    }
-    return kept;
-  };
-
   const calculateNewTotals = () => {
     const grossPay = record.basicPay + record.overtimePay + record.holidayPay + allowances + bonuses + doublePay;
     // Include advances already deducted through this record, not just newly selected ones
-    const totalDeductions = sssDeduction + philhealthDeduction + pagibigDeduction + withholdingTax + otherDeductions + Math.max(0, previouslyDeductedTotal) + totalSelectedAdvanceAmount;
+    const totalDeductions = sssDeduction + philhealthDeduction + pagibigDeduction + withholdingTax + otherDeductions + keptDeductedTotal + totalSelectedAdvanceAmount;
     const netPay = grossPay - totalDeductions;
     return { grossPay, totalDeductions, netPay };
   };
@@ -163,12 +128,11 @@ export default function AdjustmentModal({ record, onClose, onSave }: AdjustmentM
 
   const toggleAdvance = (id: string) => {
     setSelectedAdvances((prev) =>
-      prev.includes(id) ? prev.filter((a) => a !== id) : selectWithinBudget([...prev, id])
+      prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]
     );
   };
 
-  // Advances already deducted keep or lose their slot freely — releasing one
-  // frees budget for the pending ones above.
+  // Advances already deducted can be unchecked to send them back to Pending.
   const toggleDeducted = (id: string) => {
     setSelectedAdvances((prev) =>
       prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]
@@ -471,20 +435,9 @@ export default function AdjustmentModal({ record, onClose, onSave }: AdjustmentM
                 ))}
                 {(totalSelectedAdvanceAmount > 0 ||
                   keptDeductedTotal > 0 ||
-                  releasedDeductedTotal > 0 ||
-                  advanceBudgetExceeded) && (
-                  <div
-                    className={`rounded-lg p-3 text-sm ${
-                      advanceBudgetExceeded
-                        ? "bg-red-50 border border-red-200"
-                        : "bg-yellow-50 border border-yellow-200"
-                    }`}
-                  >
-                    <span
-                      className={`font-medium ${
-                        advanceBudgetExceeded ? "text-red-700" : "text-yellow-700"
-                      }`}
-                    >
+                  releasedDeductedTotal > 0) && (
+                  <div className="rounded-lg p-3 text-sm bg-yellow-50 border border-yellow-200">
+                    <span className="font-medium text-yellow-700">
                       Total Cash Advances to Deduct:{" "}
                       {formatPeso(keptDeductedTotal + totalSelectedAdvanceAmount)}
                     </span>
@@ -493,12 +446,6 @@ export default function AdjustmentModal({ record, onClose, onSave }: AdjustmentM
                         {formatPeso(releasedDeductedTotal)} goes back to Pending when you save.
                       </p>
                     )}
-                    <p className={`text-xs mt-1 ${advanceBudgetExceeded ? "text-red-600" : "text-yellow-600"}`}>
-                      Cap for this payroll: {formatPeso(remainingAdvanceBudget)} remaining (max
-                      {" "}{Math.round(maxNetFraction * 100)}% of gross pay). Oldest advances deduct first.
-                      {advanceBudgetExceeded &&
-                        ` ${formatPeso(overCapAmount)} will stay Pending for the next payroll.`}
-                    </p>
                   </div>
                 )}
               </div>
