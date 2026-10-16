@@ -48,7 +48,7 @@ function Row({
   value: string;
 }) {
   return (
-    <div className="flex items-baseline py-[2px]">
+    <div className="flex items-baseline py-[1px]">
       <span className="min-w-0 truncate">
         {label}
         {note ? <em> ({note})</em> : null}
@@ -75,7 +75,7 @@ export default function PayslipSlip({
       style={{ fontFamily: "Arial, Helvetica, sans-serif" }}
     >
       {/* Header: logo + title + period */}
-      <div className="flex items-center gap-4 px-5 pt-4 pb-2">
+      <div className="flex items-center gap-4 px-5 pt-3 pb-1">
         <PayslipLogo className="w-40 h-12" />
         <h1 className="text-3xl font-bold tracking-wide">PAYSLIP</h1>
         <span className="ml-auto text-sm italic">{periodName}</span>
@@ -112,7 +112,7 @@ export default function PayslipSlip({
             <Row label="Basic Rate:" value={peso(slip.dailyRate)} />
             <Row label="Days Worked:" value={String(slip.daysWorked)} />
             <Row label="Basic Pay:" value={peso(slip.basicPay)} />
-            <div className="h-2" />
+            <div className="h-1" />
             <Row label="OT Hours:" value={slip.totalOvertimeHours.toFixed(2)} />
             <Row
               label="OT Pay:"
@@ -129,7 +129,7 @@ export default function PayslipSlip({
             {slip.doublePay > 0 && (
               <Row label="Double Pay:" value={peso(slip.doublePay)} />
             )}
-            <div className="h-2" />
+            <div className="h-1" />
             <Row label="Absent" note="Less" value={peso(slip.absentDeduction)} />
             <Row label="Late" note="Less" value={peso(slip.lateDeduction)} />
             <div className="mt-auto flex items-baseline pt-1">
@@ -168,11 +168,23 @@ export default function PayslipSlip({
 
       {/* NET PAY band */}
       <div className="flex bg-gray-300 text-[16px]">
-        <div className="w-1/2 border-r border-black py-2 text-center italic font-bold">
+        <div className="w-1/2 border-r border-black py-1.5 text-center italic font-bold">
           NET PAY
         </div>
-        <div className="w-1/2 py-2 text-center font-bold">
+        <div className="w-1/2 py-1.5 text-center font-bold">
           {peso(slip.netPay)}
+        </div>
+      </div>
+
+      {/* Signatures */}
+      <div className="flex gap-10 border-t border-black px-5 pt-1 pb-1 text-[13px]">
+        <div className="flex-1">
+          <div className="italic">Approved by:</div>
+          <div className="mt-4 border-b border-black" />
+        </div>
+        <div className="flex-1">
+          <div className="italic">Received payment by:</div>
+          <div className="mt-4 border-b border-black" />
         </div>
       </div>
     </div>
