@@ -362,21 +362,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, message: `Deleted payroll period "${period.name}"` });
     }
 
-    if (body.type === "markPaid") {
+    if (body.type === "markPaid" || body.type === "markUnpaid") {
       const { recordId, periodId } = body;
       if (!recordId || !periodId) {
         return NextResponse.json({ error: "Record ID and Period ID are required" }, { status: 400 });
       }
 
-      // Mark the specific record as paid
+      const paid = body.type === "markPaid";
+
       const record = await prisma.payrollRecord.findUnique({ where: { id: recordId } });
       if (!record) {
         return NextResponse.json({ error: "Record not found" }, { status: 404 });
       }
+      if (record.payrollPeriodId !== periodId) {
+        return NextResponse.json({ error: "Record does not belong to this period" }, { status: 400 });
+      }
 
       await prisma.payrollRecord.update({
         where: { id: recordId },
-        data: { paid: true },
+        data: { paid },
       });
 
       // Check if all records in this period are now paid
@@ -390,13 +394,12 @@ export async function POST(request: NextRequest) {
 
       const allPaid = totalRecords > 0 && totalRecords === paidRecords;
 
-      // If all employees are paid, update the period status to PAID
-      if (allPaid) {
-        await prisma.payrollPeriod.update({
-          where: { id: periodId },
-          data: { status: "PAID" },
-        });
-      }
+      // All paid → PAID; undoing a payment puts the period back in PROCESSING
+      // so it can't stay marked PAID with unpaid rows.
+      await prisma.payrollPeriod.update({
+        where: { id: periodId },
+        data: { status: allPaid ? "PAID" : "PROCESSING" },
+      });
 
       return NextResponse.json({ success: true, allPaid, paidCount: paidRecords, totalCount: totalRecords });
     }

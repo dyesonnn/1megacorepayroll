@@ -57,6 +57,7 @@ export default function PayrollTable({
   const [adjustingRecord, setAdjustingRecord] = useState<PayrollRecord | null>(null);
   const [localRecords, setLocalRecords] = useState(records);
   const [payingRecordId, setPayingRecordId] = useState<string | null>(null);
+  const [togglingPaid, setTogglingPaid] = useState<{ id: string; paid: boolean } | null>(null);
   const [printing, setPrinting] = useState(false);
 
   // Sync local records when server-side records change (e.g. after Compute Payroll)
@@ -88,35 +89,45 @@ export default function PayrollTable({
     router.refresh();
   };
 
-  const handleMarkAsPaid = async (recordId: string) => {
+  // Marking paid and undoing it are the same request with `paid` flipped, so a
+  // mistaken click can be reverted instead of leaving the row permanently paid.
+  const handleTogglePaid = async (recordId: string, paid: boolean) => {
     setPayingRecordId(recordId);
+    setTogglingPaid({ id: recordId, paid });
     try {
       const res = await fetch("/api/payroll", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "markPaid", recordId, periodId }),
+        body: JSON.stringify({
+          type: paid ? "markPaid" : "markUnpaid",
+          recordId,
+          periodId,
+        }),
       });
 
       if (!res.ok) {
         const data = await res.json();
-        alert(data.error || "Failed to mark as paid");
+        alert(data.error || (paid ? "Failed to mark as paid" : "Failed to mark as unpaid"));
         return;
       }
 
       const result = await res.json();
-      // Update the record's paid status
+      // Update the record's paid status — the totals below recompute from this,
+      // so the period's remaining balance drops as soon as the row is paid.
       setLocalRecords((prev) =>
-        prev.map((r) => (r.id === recordId ? { ...r, paid: true } : r))
+        prev.map((r) => (r.id === recordId ? { ...r, paid } : r))
       );
 
-      // If all employees are paid, refresh to show updated period status
-      if (result.allPaid) {
-        window.location.reload();
+      // Re-fetch so the period badge (PAID / PROCESSING) and the department
+      // summary reflect the change without a full page reload.
+      if (result.allPaid || !paid) {
+        router.refresh();
       }
     } catch {
       alert("Connection error. Please try again.");
     } finally {
       setPayingRecordId(null);
+      setTogglingPaid(null);
     }
   };
 
@@ -251,51 +262,59 @@ export default function PayrollTable({
         </button>
       ),
     },
-    // Add Paid Status column
-    ...(periodStatus !== "PAID"
-      ? [
-          {
-            key: "paidStatus",
-            label: "Status",
-            render: (item: PayrollRecord) => (
-              item.paid ? (
-                <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
-                  ✅ Paid
-                </span>
-              ) : (
-                <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-700">
-                  ⏳ Pending
-                </span>
-              )
-            ),
-          },
-          {
-            key: "actions",
-            label: "Actions",
-            render: (item: PayrollRecord) => (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleAdjust(item)}
-                  className="px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                  title="Adjust deductions and bonuses"
-                >
-                  ✏️ Adjust
-                </button>
-                {!item.paid && (
-                  <button
-                    onClick={() => handleMarkAsPaid(item.id)}
-                    disabled={payingRecordId === item.id}
-                    className="px-3 py-1 text-sm text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors disabled:opacity-50"
-                    title="Mark as paid"
-                  >
-                    {payingRecordId === item.id ? "Paying..." : "💰 Paid"}
-                  </button>
-                )}
-              </div>
-            ),
-          },
-        ]
-      : []),
+    // Paid status and actions stay available even when the whole period is
+    // PAID, otherwise a row paid by mistake could never be un-paid.
+    {
+      key: "paidStatus",
+      label: "Status",
+      render: (item: PayrollRecord) =>
+        item.paid ? (
+          <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
+            ✅ Paid
+          </span>
+        ) : (
+          <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-700">
+            ⏳ Pending
+          </span>
+        ),
+    },
+    {
+      key: "actions",
+      label: "Actions",
+      render: (item: PayrollRecord) => {
+        const busy = payingRecordId === item.id;
+        return (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleAdjust(item)}
+              className="px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              title="Adjust deductions and bonuses"
+            >
+              ✏️ Adjust
+            </button>
+            {item.paid ? (
+              <button
+                onClick={() => handleTogglePaid(item.id, false)}
+                disabled={busy}
+                className="px-3 py-1 text-sm text-amber-700 bg-amber-50 border border-amber-200 hover:bg-amber-100 rounded-lg transition-colors disabled:opacity-50"
+                title="Undo this payment and put the amount back in the payroll total"
+              >
+                {busy && togglingPaid?.paid === false ? "Reverting..." : "↩️ Unpaid"}
+              </button>
+            ) : (
+              <button
+                onClick={() => handleTogglePaid(item.id, true)}
+                disabled={busy}
+                className="px-3 py-1 text-sm text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors disabled:opacity-50"
+                title="Mark as paid and deduct it from the remaining payroll balance"
+              >
+                {busy && togglingPaid?.paid ? "Paying..." : "💰 Paid"}
+              </button>
+            )}
+          </div>
+        );
+      },
+    },
   ];
 
   // Calculate totals
@@ -310,11 +329,17 @@ export default function PayrollTable({
       otherDeductions: acc.otherDeductions + r.otherDeductions,
       totalDeductions: acc.totalDeductions + r.totalDeductions,
       netPay: acc.netPay + r.netPay,
+      // What has already been handed out — subtracted from the net pay so the
+      // remaining balance is what still has to be paid.
+      paidNetPay: acc.paidNetPay + (r.paid ? r.netPay : 0),
       cashAdvance: acc.cashAdvance + r.cashAdvance,
       pendingCashAdvance: acc.pendingCashAdvance + r.pendingCashAdvance,
     }),
-    { basicPay: 0, overtimePay: 0, holidayPay: 0, bonuses: 0, doublePay: 0, grossPay: 0, otherDeductions: 0, totalDeductions: 0, netPay: 0, cashAdvance: 0, pendingCashAdvance: 0 }
+    { basicPay: 0, overtimePay: 0, holidayPay: 0, bonuses: 0, doublePay: 0, grossPay: 0, otherDeductions: 0, totalDeductions: 0, netPay: 0, paidNetPay: 0, cashAdvance: 0, pendingCashAdvance: 0 }
   );
+
+  const paidCount = localRecords.filter((r) => r.paid).length;
+  const remainingNetPay = totals.netPay - totals.paidNetPay;
 
   return (
     <div>
@@ -384,6 +409,24 @@ export default function PayrollTable({
             <span className="font-semibold text-slate-900">Total Net Pay:</span>
             <span className="font-bold text-lg text-blue-600">{formatPeso(totals.netPay)}</span>
           </div>
+          {paidCount > 0 && (
+            <>
+              <div className="flex justify-between">
+                <span className="text-slate-600">
+                  Paid ({paidCount}/{localRecords.length}):
+                </span>
+                <span className="font-medium text-green-600">−{formatPeso(totals.paidNetPay)}</span>
+              </div>
+              <div className="flex justify-between border-t border-slate-200 pt-2">
+                <span className="font-semibold text-slate-900">Remaining to Pay:</span>
+                <span
+                  className={`font-bold text-lg ${remainingNetPay <= 0 ? "text-green-600" : "text-amber-600"}`}
+                >
+                  {formatPeso(remainingNetPay)}
+                </span>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
